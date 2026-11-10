@@ -1,0 +1,13 @@
+{
+  "name": "conventions-code",
+  "description": "Convenções de desenvolvimento para o Claude Code, ativadas por projeto.",
+  "owner": {
+    "name": "uesleinac"
+  },
+  "plugins": [
+    {
+      "name": "conventions-code",
+      "source": "./"
+    }
+  ]
+}

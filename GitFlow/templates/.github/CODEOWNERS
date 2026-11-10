@@ -1,0 +1,4 @@
+*                   @org/time-dev
+/.github/           @org/time-plataforma
+/cliff.toml         @org/time-plataforma
+/scripts/deploy.sh  @org/time-plataforma

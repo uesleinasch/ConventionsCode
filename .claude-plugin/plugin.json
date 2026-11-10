@@ -1,0 +1,16 @@
+{
+  "name": "conventions-code",
+  "version": "0.1.0",
+  "description": "Convenções de desenvolvimento (GitFlow seguro, Conventional Commits/Branch, releases por tag) ativadas por projeto, sob demanda.",
+  "author": {
+    "name": "uesleinac"
+  },
+  "userConfig": {
+    "blockedRemotes": {
+      "type": "string",
+      "title": "Remotes bloqueados",
+      "description": "Trechos separados por vírgula (ex.: nome da organização no GitHub). Se o remote ou o caminho do projeto contiver algum, o plugin nunca é ativado ali.",
+      "default": ""
+    }
+  }
+}

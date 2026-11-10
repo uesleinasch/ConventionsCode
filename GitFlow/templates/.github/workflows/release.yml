@@ -1,0 +1,176 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      base: ${{ steps.meta.outputs.base }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: meta
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          [ "$(git cat-file -t "refs/tags/$TAG")" = "tag" ] || fail "$TAG não é uma tag anotada."
+
+          base="${TAG%%-rc.*}"
+          commit=$(git rev-list -n1 "$TAG")
+
+          if [[ "$TAG" == *-rc.* ]]; then
+            prerelease=true
+            git merge-base --is-ancestor "$commit" "origin/release/$base" || fail "$TAG não pertence a release/$base."
+          else
+            prerelease=false
+            [ "$commit" = "$(git rev-parse origin/production)" ] || fail "$TAG não aponta para o HEAD de production."
+          fi
+
+          {
+            echo "version=${TAG#v}"
+            echo "base=$base"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Gerar pacote
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: make package VERSION="$VERSION"
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: dist/
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Criar GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        run: |
+          if [ "$PRERELEASE" = "true" ]; then
+            git cliff --unreleased --strip header > notes.md
+            flags=(--prerelease)
+          else
+            git cliff --latest --strip header > notes.md
+            flags=(--latest)
+          fi
+          gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-file notes.md "${flags[@]}"
+
+  deploy-staging:
+    needs: [verify, publish]
+    if: needs.verify.outputs.prerelease == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: dist/
+      - run: ./scripts/deploy.sh staging dist/
+
+  deploy-production:
+    needs: [verify, publish]
+    if: needs.verify.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: dist/
+      - run: ./scripts/deploy.sh production dist/
+
+  back-merge:
+    needs: [verify, deploy-production]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Abrir PR de back-merge para main
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          BASE: ${{ needs.verify.outputs.base }}
+        run: |
+          branch="release/$BASE"
+          if [ "$(git rev-list --count "origin/main..origin/$branch")" -eq 0 ]; then
+            echo "Nenhum commit novo em $branch; back-merge desnecessário."
+            exit 0
+          fi
+
+          url=$(gh pr create --base main --head "$branch" \
+            --title "chore(release): back-merge $BASE" \
+            --body "Back-merge automático de \`$branch\` após publicação de \`$BASE\`. Deve ser mergeado com **merge commit** (nunca squash).")
+          gh pr merge "$url" --auto --merge
