@@ -1,6 +1,6 @@
 # 05 — Automação
 
-Workflows em [`templates/.github/workflows/`](templates/.github/workflows/). A cadeia é dirigida por **tags**: cada etapa cria uma ref que dispara a seguinte.
+Workflows em [`templates/.github/workflows/`](https://github.com/uesleinasch/ConventionsCode/tree/main/GitFlow/templates/.github/workflows). A cadeia é dirigida por **tags**: cada etapa cria uma ref que dispara a seguinte.
 
 ## Mapa dos workflows
 

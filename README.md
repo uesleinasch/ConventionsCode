@@ -6,6 +6,8 @@ Projeto de referência com regras e convenções de desenvolvimento para adotar 
 - **plugin do Claude Code** (`conventions-code`), que aplica as convenções no projeto em que você ativar;
 - **marketplace** de onde o plugin é instalado.
 
+Documentação publicada: <https://uesleinasch.github.io/ConventionsCode/>
+
 ## Convenções disponíveis
 
 | Convenção | ID | Conteúdo |
@@ -26,12 +28,19 @@ Instalar o plugin **não ativa nada**. Em projetos sem opt-in ele não injeta in
 
 ## Instalação
 
+A partir do GitHub:
+
+```bash
+claude plugin marketplace add uesleinasch/ConventionsCode
+claude plugin install conventions-code@conventions-code --config blockedRemotes=<org-da-empresa>
+```
+
+Para desenvolver, use o clone local como marketplace; edições valem após `/reload-plugins`, sem reinstalar:
+
 ```bash
 claude plugin marketplace add ~/Code/pessoal/ConventionsCode
 claude plugin install conventions-code@conventions-code --config blockedRemotes=<org-da-empresa>
 ```
-
-Por ser um marketplace de pasta local, edições neste repositório valem após `/reload-plugins`, sem reinstalar.
 
 O bloqueio pode ser ajustado depois em `/config` → `conventions-code.blockedRemotes`, ou em `~/.claude/settings.json`:
 
@@ -86,4 +95,7 @@ tests/                   testes do plugin
 ```bash
 claude plugin validate .
 claude plugin test .
+uvx --with mkdocs-material --with mkdocs-same-dir --from mkdocs mkdocs serve   # site local
 ```
+
+O site é publicado no GitHub Pages pelo workflow `.github/workflows/docs.yml` a cada push em `main`.

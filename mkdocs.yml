@@ -1,0 +1,73 @@
+site_name: ConventionsCode
+site_description: Convenções de desenvolvimento e plugin do Claude Code com ativação por projeto
+site_url: https://uesleinasch.github.io/ConventionsCode/
+repo_url: https://github.com/uesleinasch/ConventionsCode
+repo_name: uesleinasch/ConventionsCode
+edit_uri: edit/main/
+
+docs_dir: .
+exclude_docs: |
+  /hooks/
+  /tests/
+  /site/
+  /.venv/
+  /requirements-docs.txt
+  /tsconfig.json
+  /mkdocs.yml
+
+theme:
+  name: material
+  language: pt-BR
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: orange
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Modo escuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: orange
+      accent: deep orange
+      toggle:
+        icon: material/weather-sunny
+        name: Modo claro
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
+    - search.highlight
+
+plugins:
+  - same-dir
+  - search:
+      lang: pt
+
+nav:
+  - Início: README.md
+  - GitFlow:
+      - GitFlow/README.md
+      - Branches: GitFlow/01-branches.md
+      - Commits: GitFlow/02-commits.md
+      - Releases e tags: GitFlow/03-releases-e-tags.md
+      - Segurança: GitFlow/04-seguranca.md
+      - Automação: GitFlow/05-automacao.md
+      - Regras do agente: GitFlow/regras-agente.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - attr_list
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format

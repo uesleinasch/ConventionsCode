@@ -102,4 +102,4 @@ Mesmo pipeline; muda apenas a origem da release e o bump.
 
 ## Changelog
 
-Gerado por [git-cliff](https://git-cliff.org) a partir dos Conventional Commits ([`cliff.toml`](templates/cliff.toml)). Fica no corpo do GitHub Release; não é commitado no repositório, evitando commits de bot nas branches protegidas.
+Gerado por [git-cliff](https://git-cliff.org) a partir dos Conventional Commits ([`cliff.toml`](https://github.com/uesleinasch/ConventionsCode/blob/main/GitFlow/templates/cliff.toml)). Fica no corpo do GitHub Release; não é commitado no repositório, evitando commits de bot nas branches protegidas.

@@ -54,7 +54,7 @@ Hotfix usa o **mesmo** fluxo, mas a release é cortada a partir de `production` 
 | [03-releases-e-tags.md](03-releases-e-tags.md) | Release branch strategy, SemVer, RCs, promoção, hotfix |
 | [04-seguranca.md](04-seguranca.md) | Rulesets, assinatura, Environments, hardening das Actions |
 | [05-automacao.md](05-automacao.md) | Workflows, setup do repositório e checklist de adoção |
-| [templates/](templates/) | Arquivos prontos para copiar para um projeto |
+| [templates/](https://github.com/uesleinasch/ConventionsCode/tree/main/GitFlow/templates) | Arquivos prontos para copiar para um projeto |
 
 ## Referências
 

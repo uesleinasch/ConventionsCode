@@ -66,7 +66,7 @@ release:                      ^release/v[0-9]+\.[0-9]+\.[0-9]+$
 | `release/vX.Y.Z`   | `bugfix/*`, `hotfix/*`, `chore/*`                                 |
 | `production`       | **nenhuma** (somente fast-forward do bot)                         |
 
-Validado pelo workflow [`pr-checks.yml`](templates/.github/workflows/pr-checks.yml).
+Validado pelo workflow [`pr-checks.yml`](https://github.com/uesleinasch/ConventionsCode/blob/main/GitFlow/templates/.github/workflows/pr-checks.yml).
 
 ## Por que squash em uma direção e merge commit na outra
 
