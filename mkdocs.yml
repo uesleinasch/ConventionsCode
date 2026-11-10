@@ -55,6 +55,13 @@ nav:
       - Segurança: GitFlow/04-seguranca.md
       - Automação: GitFlow/05-automacao.md
       - Regras do agente: GitFlow/regras-agente.md
+  - Código limpo:
+      - CleanCode/README.md
+      - Nomenclatura: CleanCode/01-nomenclatura.md
+      - Funções e estrutura: CleanCode/02-funcoes-e-estrutura.md
+      - Comentários: CleanCode/03-comentarios.md
+      - Ferramentas e revisão: CleanCode/04-ferramentas.md
+      - Regras do agente: CleanCode/regras-agente.md
 
 markdown_extensions:
   - admonition
