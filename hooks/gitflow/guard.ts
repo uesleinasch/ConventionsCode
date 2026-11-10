@@ -91,7 +91,7 @@ async function checkCommit(scan: Scan): Promise<string | undefined> {
 async function checkHistoryRewrite(sub: string, scan: Scan): Promise<string | undefined> {
   const branch = await currentBranch(scan)
   return branch && isProtectedBranch(branch)
-    ? `git ${sub} em ${branch} não é permitido localmente; ${branch} só muda via PR ou workflow de release.`
+    ? `git ${sub} em ${branch} não é permitido localmente; ${branch} só muda via PR ou pelo mantenedor na release.`
     : undefined
 }
 
@@ -100,7 +100,7 @@ const PUSH_WITH_VALUE = new Set(['-o', '--push-option', '--repo', '--receive-pac
 async function checkPush(scan: Scan): Promise<string | undefined> {
   const { args } = scan
   if (args.some(a => a === '--mirror' || a === '--all' || a === '--tags' || a === '--follow-tags')) {
-    return `push em massa (--all/--mirror/--tags/--follow-tags) não é permitido; tags de versão são criadas só pelo bot de release.`
+    return `push em massa (--all/--mirror/--tags/--follow-tags) não é permitido; tags de versão são criadas só pelo mantenedor.`
   }
   const hardForce = args.some(a => a === '--force' || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a))
   const deleting = args.some(a => a === '--delete' || a === '-d')
@@ -122,13 +122,13 @@ async function checkPush(scan: Scan): Promise<string | undefined> {
 
   for (const target of targets) {
     if (target.dst.startsWith('refs/tags/') || isVersionTag(target.dst)) {
-      return `push de tag de versão (${target.dst}) não é permitido; tags v* são criadas só pelo bot de release.`
+      return `push de tag de versão (${target.dst}) não é permitido; tags v* são criadas só pelo mantenedor.`
     }
     const branch = target.dst.replace(/^refs\/heads\//, '')
     if (isProtectedBranch(branch)) {
       return target.remove
         ? `remover ${branch} não é permitido.`
-        : `push direto para ${branch} não é permitido; use PR (ou os workflows de release para production/release/*).`
+        : `push direto para ${branch} não é permitido; use PR (production e release/* são atualizadas pelo mantenedor).`
     }
     if (target.force) {
       return `force push sem lease não é permitido; use --force-with-lease em branches de trabalho.`
@@ -144,7 +144,7 @@ function checkTag(args: readonly string[]): string | undefined {
   if (args.some(a => TAG_PASSIVE.test(a))) return undefined
   const [name] = positionals(args, TAG_WITH_VALUE)
   if (!name || !isVersionTag(name)) return undefined
-  return `tags de versão (${name}) são criadas/removidas só pelo bot de release (workflows release-candidate e promote).`
+  return `tags de versão (${name}) são criadas só pelo mantenedor (05-automacao.md); mostre os comandos ao usuário em vez de executá-los.`
 }
 
 async function checkPullRequestCreate(scan: Scan): Promise<string | undefined> {

@@ -47,7 +47,7 @@ export function checkCommitHeader(message: string): string | undefined {
 
 export function checkNewBranch(name: string): string | undefined {
   if (name.startsWith('release/')) {
-    return `branches release/* são criadas apenas pelo workflow cut-release (bot de release).`
+    return `branches release/* são criadas apenas pelo mantenedor (corte da release em 05-automacao.md).`
   }
   if (name === 'main' || name === 'production') {
     return `${name} é uma branch permanente.`
@@ -75,7 +75,7 @@ export function checkPullRequestRoute(head: string, base: string): string | unde
     return ok ? undefined : `PR de "${head}" para ${base} não é permitido (aceita bugfix/*, hotfix/*, chore/*).`
   }
   if (base === 'production') {
-    return `production não recebe PR; é atualizada só pelo workflow promote.`
+    return `production não recebe PR; é atualizada só pelo mantenedor na promoção.`
   }
   return `PRs para "${base}" não são permitidos (destinos: main ou release/vX.Y.Z).`
 }

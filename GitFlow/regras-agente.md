@@ -2,8 +2,8 @@ Regras obrigatórias de Git neste projeto. Documentação completa no diretório
 
 ## Branches
 - `main`: default, integração/backup. Nunca commitar direto; só recebe PR.
-- `production`: espelho de produção. Nunca fazer push, merge ou PR para ela; só o workflow `promote` a atualiza.
-- `release/vX.Y.Z`: criada só pelo workflow `cut-release`. Nunca criar manualmente.
+- `production`: espelho de produção. Nunca fazer push, merge ou PR para ela; só o mantenedor a atualiza na promoção.
+- `release/vX.Y.Z`: criada só pelo mantenedor. Nunca criar.
 - Branches de trabalho: `feature/`, `bugfix/`, `hotfix/`, `chore/` + descrição em minúsculas com hífens (ex.: `feature/issue-42-export-csv`). Sem maiúsculas, underscore ou ponto.
 - Origem/destino:
   - `feature/*`, `bugfix/*`, `chore/*` saem de `main` e voltam para `main` por PR (squash).
@@ -17,8 +17,9 @@ Regras obrigatórias de Git neste projeto. Documentação completa no diretório
 - Bump: feat → minor, fix/perf → patch, breaking → major.
 
 ## Releases e tags
-- Nunca criar, mover, apagar ou dar push em tags `v*`; RCs (`vX.Y.Z-rc.N`) e versões finais (`vX.Y.Z`) são criados pelos workflows.
-- Releases: `gh workflow run cut-release.yml -f kind=regular|hotfix` e `gh workflow run promote.yml -f version=vX.Y.Z` — só execute se o usuário pedir explicitamente.
+- Nunca criar, mover, apagar ou dar push em tags `v*`; RCs (`vX.Y.Z-rc.N`) e versões finais (`vX.Y.Z`) são criados pelo mantenedor com `git tag -a` + `git push`.
+- Corte, RC, promoção e back-merge são comandos `git`/`gh` do mantenedor (seção "Uso diário" de `05-automacao.md`). Mostre os comandos para o usuário executar; não os rode.
+- Não existe bot nem GitHub App de release: nunca propor App, PAT, secrets de release ou workflows que criem refs.
 - Nunca usar `git push --force`; em branches de trabalho use `--force-with-lease`. Nunca `--all`, `--mirror`, `--tags`.
 
 ## Segurança

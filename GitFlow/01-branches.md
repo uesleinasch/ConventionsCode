@@ -16,7 +16,7 @@ Nomenclatura baseada em [Conventional Branch](https://conventionalbranch.org/pt-
 ### `production`
 
 - Representa **exatamente** o que está em produção. O HEAD de `production` sempre tem uma tag `vX.Y.Z`.
-- **Não recebe PR.** É atualizada somente pelo bot de release no workflow `promote`, via **fast-forward** para o commit do RC aprovado.
+- **Não recebe PR.** É atualizada somente pelo mantenedor na promoção, via **fast-forward** para o commit do RC aprovado (`git push --atomic` junto com a tag final).
 - Sem force push, sem deleção, sem commits diretos — nem de administradores.
 
 ## Branches temporárias
@@ -27,7 +27,7 @@ Nomenclatura baseada em [Conventional Branch](https://conventionalbranch.org/pt-
 | `bugfix/`    | Correção de bug                                       | `main` **ou** `release/vX.Y.Z`     | mesma branch de origem | squash |
 | `hotfix/`    | Correção urgente do que está em produção              | `release/vX.Y.Z` de hotfix         | `release/vX.Y.Z`      | squash |
 | `chore/`     | Manutenção sem impacto funcional (deps, docs, CI)     | `main` (ou release, se necessário) | mesma branch de origem | squash |
-| `release/`   | Estabilização de uma versão                           | `main` (regular) ou `production` (hotfix) | — (criada pelo bot) | — |
+| `release/`   | Estabilização de uma versão                           | `main` (regular) ou `production` (hotfix) | — (criada pelo mantenedor) | — |
 
 Branches de bots (ex.: `dependabot/*`) são aceitas como exceção, desde que os commits sigam Conventional Commits.
 
@@ -64,7 +64,7 @@ release:                      ^release/v[0-9]+\.[0-9]+\.[0-9]+$
 |--------------------|-------------------------------------------------------------------|
 | `main`             | `feature/*`, `bugfix/*`, `chore/*`, `release/v*` (back-merge), `dependabot/*` |
 | `release/vX.Y.Z`   | `bugfix/*`, `hotfix/*`, `chore/*`                                 |
-| `production`       | **nenhuma** (somente fast-forward do bot)                         |
+| `production`       | **nenhuma** (somente fast-forward do mantenedor)                  |
 
 Validado pelo workflow [`pr-checks.yml`](https://github.com/uesleinasch/ConventionsCode/blob/main/GitFlow/templates/.github/workflows/pr-checks.yml).
 
