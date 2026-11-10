@@ -17,6 +17,8 @@ type Convention = {
   rulesPath: string
   docsPath: string
   templatesPath?: string
+  templateVariants?: readonly string[]
+  setupGuide?: string
   guardsBash: boolean
 }
 
@@ -27,20 +29,37 @@ const CONVENTIONS: readonly Convention[] = [
     rulesPath: 'GitFlow/regras-agente.md',
     docsPath: 'GitFlow',
     templatesPath: 'GitFlow/templates',
+    setupGuide:
+      'Siga o checklist de GitFlow/05-automacao.md e ajude o usuário a adaptar os placeholders ' +
+      '(make lint/test/package, scripts/deploy.sh, linguagens do CodeQL, CODEOWNERS).',
     guardsBash: true,
+  },
+  {
+    id: 'clean-code',
+    title: 'Código limpo e comentários',
+    rulesPath: 'CleanCode/regras-agente.md',
+    docsPath: 'CleanCode',
+    templatesPath: 'CleanCode/templates',
+    templateVariants: ['javascript', 'python', 'dotnet'],
+    setupGuide:
+      'Veja CleanCode/04-ferramentas.md. Se o projeto já tinha configuração de lint (arquivo mantido), ' +
+      'proponha mesclar as regras em vez de substituir. Ao rodar o linter, não corrija o legado inteiro sem o usuário pedir.',
+    guardsBash: false,
   },
 ]
 
 const COMMAND = 'conventions'
 const USAGE = [
-  `Uso: /${COMMAND} <ação> [convenção]`,
+  `Uso: /${COMMAND} <ação> [convenção] [stack]`,
   '',
   '  status              mostra o que está ativo neste projeto',
   '  enable <convenção>  ativa a convenção SOMENTE neste projeto',
   '  disable <convenção> desativa a convenção neste projeto',
-  '  setup <convenção>   copia os templates para o projeto (não sobrescreve)',
+  '  setup <convenção> [stack]  copia os templates para o projeto (não sobrescreve)',
   '',
-  `Convenções: ${CONVENTIONS.map(c => c.id).join(', ')}`,
+  ...CONVENTIONS.map(c =>
+    `  ${c.id}${c.templateVariants ? ` (stacks: ${c.templateVariants.join(', ')})` : ''} — ${c.title}`,
+  ),
 ].join('\n')
 
 const findConvention = (id: string | undefined) => CONVENTIONS.find(c => c.id === id)
@@ -114,7 +133,7 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('command.run', { command: COMMAND }, async ($, e) => {
-    const [action = 'status', id] = e.args.trim().split(/\s+/).filter(Boolean)
+    const [action = 'status', id, variant] = e.args.trim().split(/\s+/).filter(Boolean)
     const state = await projectState($, blockedPatterns)
 
     if (action === 'status') {
@@ -166,9 +185,14 @@ export const register: Register = (on, options) => {
     if (action === 'setup') {
       if (!isEnabled) return { text: `Ative antes: /${COMMAND} enable ${convention.id}` }
       if (!convention.templatesPath) return { text: `${convention.id} não possui templates.` }
-      const report = await copyTemplates($, `${$.plugin.root}/${convention.templatesPath}`, state.root)
+      const variants = convention.templateVariants
+      if (variants && !variants.includes(variant ?? '')) {
+        return { text: `Informe a stack: /${COMMAND} setup ${convention.id} <${variants.join('|')}>` }
+      }
+      const source = variants ? `${convention.templatesPath}/${variant}` : convention.templatesPath
+      const report = await copyTemplates($, `${$.plugin.root}/${source}`, state.root)
       const lines = [
-        `Templates de ${convention.id} em ${state.root}:`,
+        `Templates de ${convention.id}${variants ? ` (${variant})` : ''} em ${state.root}:`,
         ...report.created.map(f => `  + ${f}`),
         ...report.skipped.map(f => `  = ${f} (já existia, não alterado)`),
       ]
@@ -177,8 +201,7 @@ export const register: Register = (on, options) => {
         context: [
           `Templates copiados para o projeto: ${report.created.join(', ') || 'nenhum'}. ` +
             `Já existentes (não alterados): ${report.skipped.join(', ') || 'nenhum'}. ` +
-            `O checklist de configuração do repositório está em ${$.plugin.root}/${convention.docsPath}/05-automacao.md; ` +
-            `ajude o usuário a adaptar os placeholders (make lint/test/package, scripts/deploy.sh, linguagens do CodeQL, CODEOWNERS).`,
+            `Documentação em ${$.plugin.root}/${convention.docsPath}. ${convention.setupGuide ?? ''}`,
         ],
       }
     }

@@ -13,6 +13,7 @@ Documentação publicada: <https://uesleinasch.github.io/ConventionsCode/>
 | Convenção | ID | Conteúdo |
 |-----------|----|----------|
 | [GitFlow](GitFlow/README.md) | `gitflow` | Branches (`main` / `production`), Conventional Branch, Conventional Commits, release branch strategy, tags `vX.Y.Z` e segurança no GitHub |
+| [Código limpo](CleanCode/README.md) | `clean-code` | Nomenclatura, funções e estrutura, comentários só quando inevitáveis, linters (ESLint, Ruff, .editorconfig) e checklist de revisão |
 
 ## Ativação por projeto (opt-in)
 
@@ -59,7 +60,12 @@ O bloqueio pode ser ajustado depois em `/config` → `conventions-code.blockedRe
 /conventions enable gitflow     # ativa só neste projeto (cria .claude/conventions.json)
 /conventions setup gitflow      # copia workflows e templates (não sobrescreve arquivos)
 /conventions disable gitflow    # desativa neste projeto
+
+/conventions enable clean-code
+/conventions setup clean-code <javascript|python|dotnet>   # config de lint da stack
 ```
+
+Convenções podem ser combinadas no mesmo projeto; cada uma adiciona sua própria seção de regras.
 
 Commite `.claude/conventions.json` para que o opt-in fique registrado no próprio repositório.
 
@@ -80,13 +86,14 @@ hooks/register.ts        comando /conventions, injeção de regras e guarda de B
 hooks/gitflow/           regras e validação do GitFlow
 hooks/shared/            parser de shell, opt-in do projeto e cópia de templates
 GitFlow/                 documentação, regras do agente (regras-agente.md) e templates
+CleanCode/               documentação, regras do agente e templates de lint por stack
 tests/                   testes do plugin
 ```
 
 ## Adicionando uma convenção
 
 1. Crie a pasta da convenção com a documentação (ex.: `CodeReview/`), um `regras-agente.md` com as regras que o Claude deve seguir e, se houver, `templates/`.
-2. Registre a convenção em `CONVENTIONS` em `hooks/register.ts` (`id`, `title`, `rulesPath`, `docsPath`, `templatesPath`, `guardsBash`).
+2. Registre a convenção em `CONVENTIONS` em `hooks/register.ts` (`id`, `title`, `rulesPath`, `docsPath`, `templatesPath`, `templateVariants` quando os templates são por stack, `setupGuide` e `guardsBash`).
 3. Se ela valida comandos, implemente o guard em `hooks/<id>/` e adicione o caso em `guardBash`.
 4. Escreva os testes em `tests/` e adicione a convenção na tabela acima.
 

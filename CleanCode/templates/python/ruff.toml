@@ -1,0 +1,15 @@
+[lint]
+select = ["E", "F", "N", "C90", "ERA", "FIX", "PLR", "SIM", "RET"]
+ignore = ["PLR2004"]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.pylint]
+max-args = 3
+max-branches = 10
+max-returns = 4
+max-statements = 40
+
+[lint.per-file-ignores]
+"tests/**" = ["PLR0913", "PLR0915"]

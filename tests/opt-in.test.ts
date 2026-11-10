@@ -12,10 +12,18 @@ function fakeHost(on: On, fake: Fake) {
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.status', () => ({ value: undefined }))
   on('fs.read', (_, e) => {
-    const text = fake.files.get(e.path) ?? (e.path.endsWith('regras-agente.md') ? 'REGRAS' : undefined)
+    const text =
+      fake.files.get(e.path) ??
+      (e.path.endsWith('regras-agente.md') ? `REGRAS ${e.path}` : e.path.endsWith('templates/python/ruff.toml') ? '[lint]' : undefined)
     if (text === undefined) throw new Error(`ENOENT ${e.path}`)
     return { value: text }
   })
+  on('fs.list', (_, e) => ({
+    value: e.path.includes('CleanCode/templates/python')
+      ? [{ name: 'ruff.toml', kind: 'file', size: 6, mtimeMs: 0, isLink: false }]
+      : [],
+  }))
+  on('fs.exists', (_, e) => ({ value: fake.files.has(e.path) }))
   on('fs.write', (_, e) => {
     fake.files.set(e.path, e.text)
     return { value: undefined }
@@ -75,4 +83,27 @@ test('remote bloqueado impede ativação e ignora marcador existente', { options
 
   const refused = await $.command.run(run('enable gitflow'))
   expect(refused.text).toMatch(/Recusado/)
+})
+
+test('clean-code injeta regras próprias, não bloqueia Bash e exige stack no setup', async ($, on) => {
+  const fake: Fake = { files: new Map(), branch: 'main', remotes: '' }
+  fakeHost(on, fake)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+
+  const enabled = await $.command.run(run('enable clean-code'))
+  expect(enabled.context?.[0]).toMatch(/CleanCode\/regras-agente\.md/)
+  expect(JSON.parse(fake.files.get(MARKER)!)).toEqual({ enabled: ['clean-code'] })
+
+  const ran = await $.tool.call(BAD_COMMIT)
+  expect(ran.deny).toBeUndefined()
+
+  const missingStack = await $.command.run(run('setup clean-code'))
+  expect(missingStack.text).toMatch(/javascript\|python\|dotnet/)
+
+  const setup = await $.command.run(run('setup clean-code python'))
+  expect(setup.text).toMatch(/\+ ruff\.toml/)
+  expect(fake.files.get(`${ROOT}/ruff.toml`)).toBe('[lint]')
+
+  const again = await $.command.run(run('setup clean-code python'))
+  expect(again.text).toMatch(/= ruff\.toml \(já existia/)
 })
