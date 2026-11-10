@@ -25,7 +25,11 @@ describe('branches', () => {
     await denied('git switch -c Feature/Export_CSV', 'main', /Conventional Branch/)
     await denied('git checkout -b misc/cleanup', 'main')
     await denied('git checkout -b feature/v1.2', 'main')
-    await denied('git switch -c release/v1.2.0', 'main', /mantenedor/)
+    await denied('git switch -c release/1.2', 'main', /release\/vX.Y.Z/)
+  })
+
+  test('aceita branch de release no padrão', async () => {
+    await allowed('git switch -c release/v1.2.0', 'main')
   })
 
   test('ignora operações que não criam branch', async () => {
@@ -86,9 +90,17 @@ describe('push', () => {
   test('recusa push em branches protegidas', async () => {
     await denied('git push origin main', 'feature/x', /PR/)
     await denied('git push', 'main')
-    await denied('git push origin HEAD:production')
-    await denied('git push origin HEAD:refs/heads/release/v1.0.0')
     await denied('git push origin :main', 'feature/x', /remover/)
+    await denied('git push origin :production', 'feature/x', /remover/)
+  })
+
+  test('aceita corte, promoção e limpeza de release', async () => {
+    await allowed('git push origin "origin/main:refs/heads/release/v1.4.0"')
+    await allowed('git push origin origin/production:refs/heads/release/v1.4.1')
+    await allowed('git push --atomic origin "abc123:refs/heads/production" "refs/tags/v1.4.0"')
+    await allowed('git push origin --delete release/v1.4.0')
+    await denied('git push origin HEAD:refs/heads/release/1.4', 'feature/x', /release\/vX.Y.Z/)
+    await denied('git push --force origin abc123:production', 'feature/x', /fast-forward/)
   })
 
   test('recusa force sem lease e push de tags', async () => {
@@ -96,16 +108,32 @@ describe('push', () => {
     await denied('git push -uf origin feature/x')
     await denied('git push origin +feature/x')
     await denied('git push --tags')
-    await denied('git push origin v1.2.0', 'feature/x', /tag/)
-    await denied('git push origin refs/tags/v1.2.0')
+  })
+
+  test('aceita push de tag de versão e recusa mover/apagar', async () => {
+    await allowed('git push origin v1.2.0')
+    await allowed('git push origin v1.2.0-rc.3')
+    await allowed('git push origin refs/tags/v1.2.0')
+    await denied('git push origin v1.2', 'feature/x', /fora do padrão/)
+    await denied('git push origin :refs/tags/v1.2.0', 'feature/x', /imutáveis/)
+    await denied('git push --delete origin v1.2.0', 'feature/x', /imutáveis/)
+    await denied('git push origin +v1.2.0', 'feature/x', /imutáveis/)
   })
 })
 
 describe('tags', () => {
-  test('recusa tags de versão', async () => {
-    await denied('git tag v1.0.0', 'feature/x', /mantenedor/)
-    await denied('git tag -a v1.0.0 -m "Release"')
-    await denied('git tag -d v1.0.0')
+  test('aceita tags de versão anotadas', async () => {
+    await allowed('git tag -a v1.0.0 -m "Release v1.0.0"')
+    await allowed('git tag -a v1.4.0-rc.1 origin/release/v1.4.0 -m "Release candidate"')
+    await allowed('git tag -s v1.0.0 -m "Release"')
+    await allowed('git tag -m "Release" v1.0.0 abc123')
+  })
+
+  test('recusa tag leve, fora do padrão, movida ou apagada', async () => {
+    await denied('git tag v1.0.0', 'feature/x', /anotada/)
+    await denied('git tag -a v1.0 -m "x"', 'feature/x', /fora do padrão/)
+    await denied('git tag -d v1.0.0', 'feature/x', /imutáveis/)
+    await denied('git tag -fa v1.0.0 -m "x"', 'feature/x', /imutáveis/)
   })
 
   test('aceita listagem e tags que não são de versão', async () => {

@@ -2,8 +2,8 @@ Regras obrigatórias de Git neste projeto. Documentação completa no diretório
 
 ## Branches
 - `main`: default, integração/backup. Nunca commitar direto; só recebe PR.
-- `production`: espelho de produção. Nunca fazer push, merge ou PR para ela; só o mantenedor a atualiza na promoção.
-- `release/vX.Y.Z`: criada só pelo mantenedor. Nunca criar.
+- `production`: espelho de produção. Nunca merge, PR ou force push; só avança por fast-forward na promoção (`git push --atomic` junto com a tag final).
+- `release/vX.Y.Z`: criada no corte da release a partir de `origin/main` (regular) ou `origin/production` (hotfix). Nunca commit direto; correções entram por PR.
 - Branches de trabalho: `feature/`, `bugfix/`, `hotfix/`, `chore/` + descrição em minúsculas com hífens (ex.: `feature/issue-42-export-csv`). Sem maiúsculas, underscore ou ponto.
 - Origem/destino:
   - `feature/*`, `bugfix/*`, `chore/*` saem de `main` e voltam para `main` por PR (squash).
@@ -17,8 +17,8 @@ Regras obrigatórias de Git neste projeto. Documentação completa no diretório
 - Bump: feat → minor, fix/perf → patch, breaking → major.
 
 ## Releases e tags
-- Nunca criar, mover, apagar ou dar push em tags `v*`; RCs (`vX.Y.Z-rc.N`) e versões finais (`vX.Y.Z`) são criados pelo mantenedor com `git tag -a` + `git push`.
-- Corte, RC, promoção e back-merge são comandos `git`/`gh` do mantenedor (seção "Uso diário" de `05-automacao.md`). Mostre os comandos para o usuário executar; não os rode.
+- Tags `vX.Y.Z-rc.N` e `vX.Y.Z` sempre anotadas (`git tag -a`) e enviadas pelo nome (`git push origin <tag>`). Nunca mover nem apagar tags `v*`.
+- Corte, RC, promoção e back-merge seguem a seção "Uso diário" de `05-automacao.md`. Execute um passo por vez, só quando o usuário pedir, e espere ele conferir os workflows antes do próximo.
 - Não existe bot nem GitHub App de release: nunca propor App, PAT, secrets de release ou workflows que criem refs.
 - Nunca usar `git push --force`; em branches de trabalho use `--force-with-lease`. Nunca `--all`, `--mirror`, `--tags`.
 

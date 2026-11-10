@@ -21,6 +21,7 @@ const HEADER = new RegExp(
 const WORK_BRANCH = /^(feature|bugfix|hotfix|chore)\/[a-z0-9]+(-[a-z0-9]+)*$/
 const RELEASE_BRANCH = /^release\/v[0-9]+\.[0-9]+\.[0-9]+$/
 const VERSION_TAG = /^v[0-9]/
+const RELEASE_TAG = /^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$/
 
 export function isProtectedBranch(branch: string): boolean {
   return branch === 'main' || branch === 'production' || branch.startsWith('release/')
@@ -28,6 +29,15 @@ export function isProtectedBranch(branch: string): boolean {
 
 export function isVersionTag(name: string): boolean {
   return VERSION_TAG.test(name.replace(/^refs\/tags\//, ''))
+}
+
+export function checkVersionTagName(name: string): string | undefined {
+  const tag = name.replace(/^refs\/tags\//, '')
+  return RELEASE_TAG.test(tag) ? undefined : `tag de versão "${tag}" fora do padrão; use vX.Y.Z ou vX.Y.Z-rc.N.`
+}
+
+export function isReleaseBranch(branch: string): boolean {
+  return RELEASE_BRANCH.test(branch)
 }
 
 export function checkCommitHeader(message: string): string | undefined {
@@ -47,7 +57,7 @@ export function checkCommitHeader(message: string): string | undefined {
 
 export function checkNewBranch(name: string): string | undefined {
   if (name.startsWith('release/')) {
-    return `branches release/* são criadas apenas pelo mantenedor (corte da release em 05-automacao.md).`
+    return RELEASE_BRANCH.test(name) ? undefined : `"${name}" fora do padrão; branches de release usam release/vX.Y.Z.`
   }
   if (name === 'main' || name === 'production') {
     return `${name} é uma branch permanente.`
@@ -75,7 +85,7 @@ export function checkPullRequestRoute(head: string, base: string): string | unde
     return ok ? undefined : `PR de "${head}" para ${base} não é permitido (aceita bugfix/*, hotfix/*, chore/*).`
   }
   if (base === 'production') {
-    return `production não recebe PR; é atualizada só pelo mantenedor na promoção.`
+    return `production não recebe PR; é atualizada por fast-forward na promoção (git push --atomic com a tag final).`
   }
   return `PRs para "${base}" não são permitidos (destinos: main ou release/vX.Y.Z).`
 }

@@ -71,9 +71,10 @@ Commite `.claude/conventions.json` para que o opt-in fique registrado no própri
 
 ### GitFlow: o que é bloqueado quando ativo
 
-- Criação de branch fora de `feature|bugfix|hotfix|chore/<descricao-em-kebab>`; criação manual de `release/*`.
+- Criação de branch fora de `feature|bugfix|hotfix|chore/<descricao-em-kebab>` ou de `release/vX.Y.Z`.
 - Commit com mensagem fora de Conventional Commits; commit, merge ou rebase direto em `main`, `production` e `release/*`.
-- Push para `main`, `production` ou `release/*`; `--force` sem lease; `--all`, `--mirror`, `--tags`; push, criação ou remoção de tags `v*`.
+- Push para `main`; force push em `production` e `release/*` (só fast-forward); `--force` sem lease; `--all`, `--mirror`, `--tags`; remoção de `main`/`production`.
+- Tags `v*` leves, fora de `vX.Y.Z`/`vX.Y.Z-rc.N`, movidas ou apagadas. Criar e enviar tags anotadas no padrão é permitido.
 - `gh pr create` com título fora do padrão ou rota de branches não permitida.
 
 A guarda local orienta o agente. A proteção definitiva fica nos rulesets e workflows do GitHub — veja [GitFlow/04-seguranca.md](GitFlow/04-seguranca.md).

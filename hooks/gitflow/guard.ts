@@ -3,7 +3,9 @@ import {
   checkCommitHeader,
   checkNewBranch,
   checkPullRequestRoute,
+  checkVersionTagName,
   isProtectedBranch,
+  isReleaseBranch,
   isVersionTag,
 } from './rules'
 
@@ -100,7 +102,7 @@ const PUSH_WITH_VALUE = new Set(['-o', '--push-option', '--repo', '--receive-pac
 async function checkPush(scan: Scan): Promise<string | undefined> {
   const { args } = scan
   if (args.some(a => a === '--mirror' || a === '--all' || a === '--tags' || a === '--follow-tags')) {
-    return `push em massa (--all/--mirror/--tags/--follow-tags) não é permitido; tags de versão são criadas só pelo mantenedor.`
+    return `push em massa (--all/--mirror/--tags/--follow-tags) não é permitido; envie cada tag pelo nome (git push origin vX.Y.Z).`
   }
   const hardForce = args.some(a => a === '--force' || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a))
   const deleting = args.some(a => a === '--delete' || a === '-d')
@@ -122,13 +124,27 @@ async function checkPush(scan: Scan): Promise<string | undefined> {
 
   for (const target of targets) {
     if (target.dst.startsWith('refs/tags/') || isVersionTag(target.dst)) {
-      return `push de tag de versão (${target.dst}) não é permitido; tags v* são criadas só pelo mantenedor.`
+      if (target.remove || target.force) {
+        return `tags de versão são imutáveis; não mova nem apague ${target.dst}.`
+      }
+      const issue = checkVersionTagName(target.dst)
+      if (issue) return issue
+      continue
     }
     const branch = target.dst.replace(/^refs\/heads\//, '')
+    if (target.force && (branch === 'production' || branch.startsWith('release/'))) {
+      return `force push em ${branch} não é permitido; production e release/* só avançam por fast-forward.`
+    }
+    if (branch === 'production') {
+      if (target.remove) return `remover production não é permitido.`
+      continue
+    }
+    if (branch.startsWith('release/')) {
+      if (!isReleaseBranch(branch)) return `"${branch}" fora do padrão; branches de release usam release/vX.Y.Z.`
+      continue
+    }
     if (isProtectedBranch(branch)) {
-      return target.remove
-        ? `remover ${branch} não é permitido.`
-        : `push direto para ${branch} não é permitido; use PR (production e release/* são atualizadas pelo mantenedor).`
+      return target.remove ? `remover ${branch} não é permitido.` : `push direto para ${branch} não é permitido; use PR.`
     }
     if (target.force) {
       return `force push sem lease não é permitido; use --force-with-lease em branches de trabalho.`
@@ -140,11 +156,21 @@ async function checkPush(scan: Scan): Promise<string | undefined> {
 const TAG_WITH_VALUE = new Set(['-m', '--message', '-F', '--file', '-u', '--local-user', '--cleanup'])
 const TAG_PASSIVE = /^(-l|--list|-n\d*|--contains|--no-contains|--merged|--no-merged|--points-at|--sort|--format|-v|--verify|--column|--no-column)(=|$)/
 
+const TAG_REMOVE_OR_MOVE = /^(-d|--delete|-f|--force)$|^-[a-zA-Z]*[df][a-zA-Z]*$/
+const TAG_ANNOTATED = /^(-a|--annotate|-s|--sign|-u|--local-user|-m|--message|-F|--file)(=|$)|^-[a-zA-Z]*[asm][a-zA-Z]*$/
+
 function checkTag(args: readonly string[]): string | undefined {
   if (args.some(a => TAG_PASSIVE.test(a))) return undefined
   const [name] = positionals(args, TAG_WITH_VALUE)
   if (!name || !isVersionTag(name)) return undefined
-  return `tags de versão (${name}) são criadas só pelo mantenedor (05-automacao.md); mostre os comandos ao usuário em vez de executá-los.`
+  if (args.some(a => TAG_REMOVE_OR_MOVE.test(a))) {
+    return `tags de versão são imutáveis; não mova nem apague ${name}.`
+  }
+  const issue = checkVersionTagName(name)
+  if (issue) return issue
+  return args.some(a => TAG_ANNOTATED.test(a))
+    ? undefined
+    : `tag ${name} precisa ser anotada: git tag -a ${name} -m "..." (o release.yml recusa tags leves).`
 }
 
 async function checkPullRequestCreate(scan: Scan): Promise<string | undefined> {
