@@ -2,14 +2,14 @@
 
 Controles para garantir que **só código revisado, testado e aprovado** chegue em produção, e que seja possível provar isso.
 
-## Identidade do bot de release
+## Quem move as refs de release
 
-Use um **GitHub App** dedicado (ex.: `release-bot`), não um PAT pessoal.
+O **mantenedor** (papel *Admin* ou *Maintain* no repositório) cria `release/v*`, as tags `v*` e atualiza `production` com `git` e `gh`, usando a própria autenticação. Os workflows **não** criam refs: só reagem ao push de tags.
 
-- Permissões mínimas: `contents: write`, `pull_requests: write`.
-- É o **único** ator na lista de bypass de `production`, `release/v*` (criação) e tags `v*`.
-- Credenciais: `vars.RELEASE_APP_ID` e `secrets.RELEASE_APP_PRIVATE_KEY`, com acesso restrito aos workflows de release.
-- Motivo técnico: refs criadas com `GITHUB_TOKEN` **não disparam** outros workflows; o token do App dispara (necessário para o encadeamento por tags).
+- Não há bot, GitHub App, PAT nem secret de release para configurar.
+- Push feito pelo mantenedor dispara os workflows normalmente; refs criadas por workflows com `GITHUB_TOKEN` não disparariam, por isso a convenção não depende delas.
+- O papel do mantenedor é o **único** na lista de bypass de `production`, `release/v*` (criação) e tags `v*`. Os demais colaboradores só abrem PRs.
+- As validações que impedem uma promoção errada ficam no `release.yml` e nos rulesets, não na disciplina de quem executa.
 
 ## Rulesets (Settings → Rules → Rulesets)
 
@@ -29,11 +29,13 @@ Use um **GitHub App** dedicado (ex.: `release-bot`), não um PAT pessoal.
 | Allowed merge methods                   | Squash, Merge                          |
 | Bypass                                  | **ninguém**                            |
 
+> **Projeto com um único mantenedor:** o GitHub não deixa o autor aprovar o próprio PR. Use **0 aprovações** e desligue *Require review from Code Owners* e *Require approval of the most recent push*; mantenha PR obrigatório, status checks, conversation resolution e commits assinados. Volte para 1 aprovação quando houver um segundo revisor.
+
 ### `production`
 
 | Regra               | Valor                                    |
 |---------------------|------------------------------------------|
-| Restrict updates    | ✅ — bypass: **somente** o App de release |
+| Restrict updates    | ✅ — bypass: **somente** o papel do mantenedor (Admin/Maintain) |
 | Restrict deletions  | ✅                                       |
 | Block force pushes  | ✅ (sem bypass)                          |
 
@@ -41,31 +43,34 @@ Use um **GitHub App** dedicado (ex.: `release-bot`), não um PAT pessoal.
 
 | Regra                       | Valor                                          |
 |-----------------------------|------------------------------------------------|
-| Restrict creations          | ✅ — bypass: App de release                     |
-| Require a pull request      | ✅ — 1 aprovação, Code Owners                   |
+| Restrict creations          | ✅ — bypass: mantenedor                         |
+| Require a pull request      | ✅ — 1 aprovação, Code Owners (0 em projeto solo) |
 | Required status checks      | `pr-checks`, `ci`, `security`                  |
 | Require signed commits      | ✅                                             |
 | Block force pushes          | ✅                                             |
-| Restrict deletions          | ✅ — bypass: App de release e admins (limpeza)  |
+| Restrict deletions          | ✅ — bypass: mantenedor (limpeza após back-merge) |
 | Allowed merge methods       | Squash (PRs) — back-merge é na `main`          |
 
 ### Tags `refs/tags/v*`
 
 | Regra               | Valor                         |
 |---------------------|-------------------------------|
-| Restrict creations  | ✅ — bypass: App de release    |
+| Restrict creations  | ✅ — bypass: mantenedor        |
 | Restrict updates    | ✅ — sem bypass                |
 | Restrict deletions  | ✅ — sem bypass                |
 
-Resultado: ninguém (nem admin) move uma tag publicada, reescreve `production` ou cria uma versão fora do pipeline.
+Resultado: ninguém (nem admin) move uma tag publicada ou reescreve `production`; só o mantenedor cria versões, e o `release.yml` recusa tags que não passam nas validações.
+
+No bypass de cada ruleset: *Bypass list → Add bypass → Repository admin* (ou *Maintain*), modo **Always**.
 
 ## Environments (Settings → Environments)
 
 | Environment        | Proteção                                                    | Uso                       |
 |--------------------|-------------------------------------------------------------|---------------------------|
 | `staging`          | Deployment refs: tags `v*-rc.*`                             | Deploy dos RCs            |
-| `release-approval` | **Required reviewers** (time de release), *prevent self-review*, refs: `main` | Gate do `promote` |
-| `production`       | Deployment refs: tags `v*.*.*`; secrets de produção só aqui | Deploy das versões finais |
+| `production`       | Deployment refs: tags `v*.*.*`; secrets de produção só aqui; *required reviewers* opcional (time de release, *prevent self-review*) | Deploy das versões finais |
+
+Em projeto solo, deixe `production` sem *required reviewers* (ou com você mesmo, sem *prevent self-review*): a aprovação já acontece quando você cria a tag final.
 
 Secrets de produção ficam **apenas** no Environment `production` — nunca em secrets do repositório.
 

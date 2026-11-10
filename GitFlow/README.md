@@ -8,40 +8,40 @@ Plataforma de referência: **GitHub** (Rulesets, Environments, GitHub Actions). 
 
 1. **Nada chega em produção sem passar por uma release versionada.** Produção só recebe código via tag `vX.Y.Z`.
 2. **O que foi validado é exatamente o que é publicado.** A tag final aponta para o mesmo commit do último release candidate (RC) aprovado.
-3. **Humanos abrem PRs; o bot de release move refs protegidas.** `production`, `release/*` e tags `v*` só são criados/atualizados por um GitHub App de release.
+3. **Colaboradores abrem PRs; o mantenedor move refs protegidas.** `production`, `release/*` e tags `v*` são criados/atualizados só pelo mantenedor, com `git` e `gh`. Os workflows reagem às tags; não há bot nem GitHub App.
 4. **A versão é derivada dos commits.** Conventional Commits → SemVer → changelog, sem edição manual.
-5. **Tudo é auditável.** Commits assinados, tags anotadas, atestação de proveniência dos pacotes e aprovação registrada em Environment.
+5. **Tudo é auditável.** Commits assinados, tags anotadas e atestação de proveniência dos pacotes.
 
 ## Branches permanentes
 
 | Branch       | Papel                                                                 | Quem atualiza                         |
 |--------------|-----------------------------------------------------------------------|---------------------------------------|
 | `main`       | Branch **default**. Integração e backup de todo o código desenvolvido. | PRs revisados (squash / back-merge)   |
-| `production` | Espelho exato do que está **em produção**. Sempre igual a uma tag `vX.Y.Z`. | Somente o bot, via fast-forward na promoção |
+| `production` | Espelho exato do que está **em produção**. Sempre igual a uma tag `vX.Y.Z`. | Somente o mantenedor, via fast-forward na promoção |
 
 ## Visão do fluxo
 
 ```mermaid
 flowchart LR
     F["feature/* · bugfix/* · chore/*"] -- "PR (squash)" --> M[main]
-    M -- "cut-release" --> R["release/vX.Y.Z"]
+    M -- "git push release/vX.Y.Z" --> R["release/vX.Y.Z"]
     B["bugfix/* · hotfix/*"] -- "PR (squash)" --> R
-    R -- "push → tag vX.Y.Z-rc.N" --> S[(staging)]
-    R -- "promote (aprovação)\ntag vX.Y.Z + fast-forward" --> P[production]
+    R -- "tag vX.Y.Z-rc.N" --> S[(staging)]
+    R -- "tag vX.Y.Z + fast-forward" --> P[production]
     P -- "tag vX.Y.Z" --> PR[(produção)]
     R -- "back-merge (merge commit)" --> M
-    P -- "cut-release hotfix" --> R
+    P -- "git push release/vX.Y.(Z+1)" --> R
 ```
 
 Ciclo resumido:
 
 1. Desenvolvimento em `feature/*`, `bugfix/*`, `chore/*` → PR para `main` (squash, título em Conventional Commit).
-2. `cut-release` calcula a próxima versão pelos commits e cria `release/vX.Y.Z` a partir de `main`.
-3. Cada push na release gera uma tag `vX.Y.Z-rc.N` → build do pacote → deploy em **staging**.
+2. O mantenedor calcula a próxima versão pelos commits (`git cliff --bumped-version`) e cria `release/vX.Y.Z` a partir de `main`.
+3. Com o CI da release verde, o mantenedor cria a tag `vX.Y.Z-rc.N` → build do pacote → deploy em **staging**.
 4. Correções da release entram por PR de `bugfix/*` direto na `release/vX.Y.Z` (novo RC a cada merge).
-5. `promote` (com aprovação obrigatória) cria a tag `vX.Y.Z` no mesmo commit do último RC e faz fast-forward de `production`.
+5. O mantenedor cria a tag `vX.Y.Z` no mesmo commit do último RC e faz fast-forward de `production` (`git push --atomic`).
 6. A tag final dispara build, atestação, GitHub Release com changelog e deploy em **produção**.
-7. Back-merge automático `release/vX.Y.Z` → `main` (merge commit) para levar as correções de volta.
+7. Back-merge `release/vX.Y.Z` → `main` com `gh pr create` (merge commit) para levar as correções de volta.
 
 Hotfix usa o **mesmo** fluxo, mas a release é cortada a partir de `production` com bump de patch.
 
@@ -54,6 +54,7 @@ Hotfix usa o **mesmo** fluxo, mas a release é cortada a partir de `production` 
 | [03-releases-e-tags.md](03-releases-e-tags.md) | Release branch strategy, SemVer, RCs, promoção, hotfix |
 | [04-seguranca.md](04-seguranca.md) | Rulesets, assinatura, Environments, hardening das Actions |
 | [05-automacao.md](05-automacao.md) | Workflows, setup do repositório e checklist de adoção |
+| [fluxo.html](fluxo.html) | Diagrama interativo do fluxo regular e do hotfix, com comandos e checklist de verificação |
 | [templates/](https://github.com/uesleinasch/ConventionsCode/tree/main/GitFlow/templates) | Arquivos prontos para copiar para um projeto |
 
 ## Referências

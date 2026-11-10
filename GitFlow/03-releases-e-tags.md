@@ -15,8 +15,8 @@ Regras de tag:
 
 - Sempre **anotadas** (`git tag -a`), nunca leves. O workflow rejeita tags leves.
 - **Imutáveis**: não podem ser movidas nem apagadas (ruleset de tags).
-- Criadas **somente pelo bot de release**.
-- A versão é **calculada** a partir dos commits desde a última tag final:
+- Criadas **pelo mantenedor** com `git tag -a` + `git push origin <tag>`; o push da tag dispara o `release.yml`.
+- A versão é **calculada** a partir dos commits desde a última tag final (`git cliff --bumped-version`):
   - existe `!`/`BREAKING CHANGE` → major
   - existe `feat` → minor
   - caso contrário → patch
@@ -28,65 +28,66 @@ sequenceDiagram
     actor Dev
     participant main
     participant rel as release/v1.4.0
-    participant bot as Release Bot
+    participant gh as GitHub Actions
     participant prod as production
 
     Dev->>main: PRs feature/* (squash)
-    Dev->>bot: workflow cut-release (regular)
-    bot->>rel: cria a partir de main (versão calculada)
-    bot->>rel: tag v1.4.0-rc.1 → staging
+    Dev->>rel: git push release/v1.4.0 (a partir de main)
+    Dev->>rel: tag v1.4.0-rc.1
+    rel->>gh: release.yml → pre-release + staging
     Dev->>rel: PR bugfix/* (squash)
-    bot->>rel: tag v1.4.0-rc.2 → staging
-    Dev->>bot: workflow promote v1.4.0 (aprovação)
-    bot->>rel: tag v1.4.0 no commit do rc.2
-    bot->>prod: fast-forward para v1.4.0
-    bot->>prod: tag v1.4.0 → build + deploy prod
-    bot->>main: PR back-merge (merge commit, auto-merge)
+    Dev->>rel: tag v1.4.0-rc.2
+    rel->>gh: release.yml → pre-release + staging
+    Dev->>prod: push --atomic: tag v1.4.0 (commit do rc.2) + fast-forward
+    prod->>gh: release.yml → GitHub Release + deploy prod
+    Dev->>main: gh pr create back-merge (merge commit)
 ```
 
-### 1. Corte da release — `cut-release`
+Comandos completos em [05-automacao.md](05-automacao.md#uso-diario).
 
-- Executado manualmente (`workflow_dispatch`, tipo `regular`).
-- Calcula a próxima versão com `git-cliff --bumped-version`.
-- Falha se não houver commits relevantes ou se `release/vX.Y.Z` já existir.
-- Cria `release/vX.Y.Z` a partir do HEAD de `main`.
+### 1. Corte da release
+
+- Calcule a próxima versão localmente com `git cliff --bumped-version` e compare com a última tag final.
+- Crie `release/vX.Y.Z` a partir do HEAD de `origin/main` e faça push.
 - A partir daqui, `main` segue recebendo features normalmente — elas vão para a **próxima** release.
 
-### 2. Estabilização — `release-candidate`
+### 2. Estabilização — tags RC
 
-- Todo push em `release/v*` roda o CI e cria a tag `vX.Y.Z-rc.N` (N incremental).
-- A tag RC dispara `release.yml`: pacote gerado, publicado como **pre-release** e implantado em **staging**.
-- Na release só entram correções (`bugfix/*`, `hotfix/*`, `chore/*`) via PR. **Nenhuma feature nova.**
+- Todo push em `release/v*` roda o CI (`ci.yml`).
+- Com o CI verde, crie a tag `vX.Y.Z-rc.N` (N incremental) no HEAD da release.
+- A tag RC dispara `release.yml`: CI, pacote, **pre-release** e deploy em **staging**.
+- Na release só entram correções (`bugfix/*`, `hotfix/*`, `chore/*`) via PR. **Nenhuma feature nova.** Cada correção mergeada pede um novo RC.
 
-### 3. Promoção — `promote`
+### 3. Promoção — tag final
 
-- Executado manualmente informando a versão (`v1.4.0`).
-- Exige **aprovação** no Environment `release-approval` (registro de quem aprovou e quando).
-- Validações antes de promover:
-  - a versão ainda não tem tag final;
-  - o HEAD de `release/vX.Y.Z` é exatamente o commit do **último RC**;
-  - o pre-release desse RC existe (build concluído);
-  - `production` é ancestral do HEAD da release (fast-forward possível).
-- Cria a tag anotada `vX.Y.Z` **no mesmo commit do RC** e atualiza `production` por fast-forward, em um único `git push --atomic`.
+- Crie a tag anotada `vX.Y.Z` **no mesmo commit do último RC** e atualize `production` por fast-forward, em um único `git push --atomic`.
+- O ruleset de `production` bloqueia force push: se `production` não for ancestral da release, o push é recusado.
 
-### 4. Publicação — `release` (tag final)
+### 4. Publicação — `release.yml` (tag final)
 
-- Verifica que a tag é anotada e aponta para o HEAD de `production`.
-- Gera o pacote, a **atestação de proveniência** (SLSA) e o GitHub Release com changelog.
-- Deploy no Environment `production`.
-- Abre o PR de **back-merge** `release/vX.Y.Z → main` com auto-merge por **merge commit** (pulado se não houver commits novos na release).
+- Valida antes de publicar:
+  - a tag é anotada e aponta para o HEAD de `production`;
+  - a tag está no commit do **último RC** da versão;
+  - o pre-release desse RC existe (build concluído).
+- Roda o CI, gera o pacote, a **atestação de proveniência** (SLSA) e o GitHub Release com changelog.
+- Deploy no Environment `production` (com aprovação, se o Environment tiver *required reviewers*).
+
+### 5. Back-merge
+
+- Abra o PR `release/vX.Y.Z → main` com `gh pr create` e faça merge por **merge commit** (pule se a release não tiver commits novos).
+- O PR é aberto por você (não pelo `GITHUB_TOKEN`) para que os checks obrigatórios rodem.
 
 ## Fluxo de hotfix
 
 Mesmo pipeline; muda apenas a origem da release e o bump.
 
-1. `cut-release` com tipo `hotfix` → cria `release/vX.Y.(Z+1)` a partir de `production`.
-2. Dev cria `hotfix/descricao` a partir dessa release e abre PR para ela.
-3. Merge → `vX.Y.(Z+1)-rc.1` → staging → validação.
-4. `promote vX.Y.(Z+1)` → produção.
+1. Crie `release/vX.Y.(Z+1)` a partir de `origin/production` e faça push.
+2. Crie `hotfix/descricao` a partir dessa release e abra PR para ela.
+3. Merge → tag `vX.Y.(Z+1)-rc.1` → staging → validação.
+4. Tag `vX.Y.(Z+1)` + fast-forward de `production` → produção.
 5. Back-merge para `main` leva o hotfix ao desenvolvimento.
 
-> Se uma release regular estiver em andamento durante o hotfix, após o back-merge do hotfix em `main`, aplique a correção também na release aberta (cherry-pick em `bugfix/*` com PR para ela). Caso contrário o `promote` da release regular falhará por `production` não ser ancestral — o que é o comportamento desejado: impede regressão do hotfix.
+> Se uma release regular estiver em andamento durante o hotfix, após o back-merge do hotfix em `main`, aplique a correção também na release aberta (cherry-pick em `bugfix/*` com PR para ela). Caso contrário a promoção da release regular será recusada por `production` não ser ancestral — o que é o comportamento desejado: impede regressão do hotfix.
 
 ## Pacotes
 
@@ -102,4 +103,4 @@ Mesmo pipeline; muda apenas a origem da release e o bump.
 
 ## Changelog
 
-Gerado por [git-cliff](https://git-cliff.org) a partir dos Conventional Commits ([`cliff.toml`](https://github.com/uesleinasch/ConventionsCode/blob/main/GitFlow/templates/cliff.toml)). Fica no corpo do GitHub Release; não é commitado no repositório, evitando commits de bot nas branches protegidas.
+Gerado por [git-cliff](https://git-cliff.org) a partir dos Conventional Commits ([`cliff.toml`](https://github.com/uesleinasch/ConventionsCode/blob/main/GitFlow/templates/cliff.toml)). Fica no corpo do GitHub Release; não é commitado no repositório, evitando commits extras nas branches protegidas.

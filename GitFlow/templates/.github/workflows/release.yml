@@ -29,6 +29,7 @@ jobs:
       - id: meta
         env:
           TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           fail() { echo "::error::$1"; exit 1; }
 
@@ -44,6 +45,11 @@ jobs:
           else
             prerelease=false
             [ "$commit" = "$(git rev-parse origin/production)" ] || fail "$TAG não aponta para o HEAD de production."
+
+            rc=$(git tag -l "$base-rc.*" --sort=-v:refname | head -n1)
+            [ -n "$rc" ] || fail "Nenhum release candidate para $base."
+            [ "$(git rev-list -n1 "$rc")" = "$commit" ] || fail "$TAG não está no commit do último RC ($rc)."
+            gh release view "$rc" >/dev/null 2>&1 || fail "Pre-release $rc não encontrado (build do RC falhou ou não terminou)."
           fi
 
           {
@@ -52,8 +58,12 @@ jobs:
             echo "prerelease=$prerelease"
           } >> "$GITHUB_OUTPUT"
 
-  build:
+  ci:
     needs: verify
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: [verify, ci]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -143,34 +153,3 @@ jobs:
           name: package
           path: dist/
       - run: ./scripts/deploy.sh production dist/
-
-  back-merge:
-    needs: [verify, deploy-production]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/create-github-app-token@v1
-        id: app
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Abrir PR de back-merge para main
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          BASE: ${{ needs.verify.outputs.base }}
-        run: |
-          branch="release/$BASE"
-          if [ "$(git rev-list --count "origin/main..origin/$branch")" -eq 0 ]; then
-            echo "Nenhum commit novo em $branch; back-merge desnecessário."
-            exit 0
-          fi
-
-          url=$(gh pr create --base main --head "$branch" \
-            --title "chore(release): back-merge $BASE" \
-            --body "Back-merge automático de \`$branch\` após publicação de \`$BASE\`. Deve ser mergeado com **merge commit** (nunca squash).")
-          gh pr merge "$url" --auto --merge

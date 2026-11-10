@@ -25,7 +25,7 @@ describe('branches', () => {
     await denied('git switch -c Feature/Export_CSV', 'main', /Conventional Branch/)
     await denied('git checkout -b misc/cleanup', 'main')
     await denied('git checkout -b feature/v1.2', 'main')
-    await denied('git switch -c release/v1.2.0', 'main', /cut-release/)
+    await denied('git switch -c release/v1.2.0', 'main', /mantenedor/)
   })
 
   test('ignora operações que não criam branch', async () => {
@@ -103,7 +103,7 @@ describe('push', () => {
 
 describe('tags', () => {
   test('recusa tags de versão', async () => {
-    await denied('git tag v1.0.0', 'feature/x', /bot de release/)
+    await denied('git tag v1.0.0', 'feature/x', /mantenedor/)
     await denied('git tag -a v1.0.0 -m "Release"')
     await denied('git tag -d v1.0.0')
   })
