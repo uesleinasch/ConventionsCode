@@ -1,22 +1,22 @@
 # 03 — Release Branch Strategy e Tags
 
-Produção recebe **releases empacotadas e versionadas**. Toda automação de entrega é disparada por **tags**.
+Produção recebe **releases seletivas e versionadas**: só as features aprovadas entram, cada uma como um commit, e cada publicação ganha uma tag `vX.Y.Z` que dispara o pacote e o deploy.
 
 ## Versionamento
 
 [SemVer 2.0.0](https://semver.org/lang/pt-BR/) com prefixo `v`.
 
-| Tag                | Significado                     | Dispara                                       |
-|--------------------|---------------------------------|-----------------------------------------------|
-| `vX.Y.Z-rc.N`      | Release candidate N da versão   | build do pacote, pre-release, deploy staging  |
-| `vX.Y.Z`           | Versão final, em produção       | build, atestação, GitHub Release, deploy prod |
+| Tag       | Significado                  | Dispara                                       |
+|-----------|------------------------------|-----------------------------------------------|
+| `vX.Y.Z`  | Versão publicada em produção | CI, pacote, atestação, GitHub Release, deploy em produção |
 
 Regras de tag:
 
 - Sempre **anotadas** (`git tag -a`), nunca leves. O workflow rejeita tags leves.
 - **Imutáveis**: não podem ser movidas nem apagadas (ruleset de tags).
-- Criadas **pelo mantenedor** com `git tag -a` + `git push origin <tag>`; o push da tag dispara o `release.yml`.
-- A versão é **calculada** a partir dos commits desde a última tag final (`git cliff --bumped-version`):
+- Criadas no commit de `production` resultante do merge da release (ou do hotfix), depois do merge.
+- Sempre maiores que a versão anterior; o `release.yml` recusa a publicação caso contrário.
+- O nível do bump segue os commits que entraram (confira com `git cliff --bumped-version` na release antes de publicar):
   - existe `!`/`BREAKING CHANGE` → major
   - existe `feat` → minor
   - caso contrário → patch
@@ -26,80 +26,89 @@ Regras de tag:
 ```mermaid
 sequenceDiagram
     actor Dev
-    participant main
-    participant rel as release/v1.4.0
-    participant gh as GitHub Actions
+    actor QA
+    actor Mant as Mantenedor
     participant prod as production
+    participant stg as staging
+    participant rel as release/v1.4.0
+    participant main
 
-    Dev->>main: PRs feature/* (squash)
-    Dev->>rel: git push release/v1.4.0 (a partir de main)
-    Dev->>rel: tag v1.4.0-rc.1
-    rel->>gh: release.yml → pre-release + staging
-    Dev->>rel: PR bugfix/* (squash)
-    Dev->>rel: tag v1.4.0-rc.2
-    rel->>gh: release.yml → pre-release + staging
-    Dev->>prod: push --atomic: tag v1.4.0 (commit do rc.2) + fast-forward
-    prod->>gh: release.yml → GitHub Release + deploy prod
-    Dev->>main: gh pr create back-merge (merge commit)
+    Dev->>prod: git switch -c feature/proj-123 origin/production
+    Dev->>stg: merge da feature → deploy homologação
+    QA->>stg: aprova ou reprova cada feature
+    Mant->>rel: cria a partir de production
+    Dev->>rel: PR squash de cada feature aprovada
+    Mant->>stg: reset para release/v1.4.0 → smoke test
+    Mant->>prod: PR release/v1.4.0 (merge commit)
+    Mant->>prod: tag v1.4.0 → release.yml → produção
+    Mant->>stg: reset para production
+    Mant->>main: PR production → main (a cada N releases)
 ```
 
 Comandos completos em [05-automacao.md](05-automacao.md#uso-diario).
 
-### 1. Corte da release
+### 1. Desenvolvimento
 
-- Calcule a próxima versão localmente com `git cliff --bumped-version` e compare com a última tag final.
-- Crie `release/vX.Y.Z` a partir do HEAD de `origin/main` e faça push.
-- A partir daqui, `main` segue recebendo features normalmente — elas vão para a **próxima** release.
+- A branch nasce de `production`: `git switch -c feature/proj-123-descricao origin/production`.
+- Quantos commits quiser: o squash na release junta tudo em um.
+- Se `production` avançou (outra release ou hotfix), sincronize com `git rebase origin/production`. **Nunca** `git merge staging`: isso traz features alheias, inclusive reprovadas, e impede a entrega seletiva.
 
-### 2. Estabilização — tags RC
+### 2. Teste em homologação (opcional)
 
-- Todo push em `release/v*` roda o CI (`ci.yml`).
-- Com o CI verde, crie a tag `vX.Y.Z-rc.N` (N incremental) no HEAD da release.
-- A tag RC dispara `release.yml`: CI, pacote, **pre-release** e deploy em **staging**.
-- Na release só entram correções (`bugfix/*`, `hotfix/*`, `chore/*`) via PR. **Nenhuma feature nova.** Cada correção mergeada pede um novo RC.
+- Merge normal da feature em `staging` e push → o workflow `staging.yml` roda o CI e faz deploy em homologação.
+- `staging` pode ter várias features ao mesmo tempo; a branch da feature continua limpa.
+- QA aprova ou reprova cada feature. Reprovadas são corrigidas na própria branch e mergeadas de novo em `staging`.
 
-### 3. Promoção — tag final
+### 3. Corte da release
 
-- Crie a tag anotada `vX.Y.Z` **no mesmo commit do último RC** e atualize `production` por fast-forward, em um único `git push --atomic`.
-- O ruleset de `production` bloqueia force push: se `production` não for ancestral da release, o push é recusado.
+- O mantenedor cria `release/vX.Y.Z` a partir de `origin/production`, escolhendo a versão pelos commits esperados.
+- A release nasce limpa: mesmo conteúdo de produção.
 
-### 4. Publicação — `release.yml` (tag final)
+### 4. Features aprovadas entram por squash
 
-- Valida antes de publicar:
-  - a tag é anotada e aponta para o HEAD de `production`;
-  - a tag está no commit do **último RC** da versão;
-  - o pre-release desse RC existe (build concluído).
-- Roda o CI, gera o pacote, a **atestação de proveniência** (SLSA) e o GitHub Release com changelog.
-- Deploy no Environment `production` (com aprovação, se o Environment tiver *required reviewers*).
+- Cada feature aprovada abre PR para `release/vX.Y.Z` com **squash**. O título do PR vira o commit: `feat(proj-123): descrição`.
+- Features reprovadas não abrem PR e não entram.
+- Para tirar uma feature que já entrou: `git revert <commit-do-squash>` na release (um commit por feature torna isso cirúrgico).
 
-### 5. Back-merge
+### 5. Validação final
 
-- Abra o PR `release/vX.Y.Z → main` com `gh pr create` e faça merge por **merge commit** (pule se a release não tiver commits novos).
-- O PR é aberto por você (não pelo `GITHUB_TOKEN`) para que os checks obrigatórios rodem.
+- Com homologação: `staging` é resetada para o estado exato da release (`git push --force-with-lease origin origin/release/vX.Y.Z:staging`) e passa por smoke test do conjunto.
+- Sem homologação: o CI da release (`ci.yml` em push de `release/v*`) é a validação.
+
+### 6. Publicação
+
+- PR `release/vX.Y.Z → production` com **merge commit**. Pipeline e aprovações obrigatórias pelo ruleset.
+- Após o merge, tag anotada `vX.Y.Z` no HEAD de `production` e push da tag.
+- O `release.yml` valida (tag anotada, contida em `production`, maior que a anterior), roda o CI, gera o pacote, a **atestação de proveniência** (SLSA) e o GitHub Release com changelog, e faz o deploy no Environment `production`.
+- A branch `release/vX.Y.Z` é removida.
+
+### 7. Limpeza pós-publicação
+
+- `staging` é resetada para `production` (`git push --force-with-lease origin origin/production:staging`): toda a contaminação acumulada some e o próximo ciclo começa igual à produção. Features em teste que não entraram são mergeadas de novo em `staging` por quem as desenvolve.
+- A cada **N releases publicadas** (padrão 2), PR `production → main` com merge commit. É o único caminho até `main`, e o `pr-checks.yml` só aceita quando o HEAD de `production` tem tag `vX.Y.Z`. O `release.yml` avisa (job `main-sync-reminder`) quando o intervalo é atingido.
 
 ## Fluxo de hotfix
 
-Mesmo pipeline; muda apenas a origem da release e o bump.
+Correção urgente não passa pela release nem por `staging` antes de produção.
 
-1. Crie `release/vX.Y.(Z+1)` a partir de `origin/production` e faça push.
-2. Crie `hotfix/descricao` a partir dessa release e abra PR para ela.
-3. Merge → tag `vX.Y.(Z+1)-rc.1` → staging → validação.
-4. Tag `vX.Y.(Z+1)` + fast-forward de `production` → produção.
-5. Back-merge para `main` leva o hotfix ao desenvolvimento.
-
-> Se uma release regular estiver em andamento durante o hotfix, após o back-merge do hotfix em `main`, aplique a correção também na release aberta (cherry-pick em `bugfix/*` com PR para ela). Caso contrário a promoção da release regular será recusada por `production` não ser ancestral — o que é o comportamento desejado: impede regressão do hotfix.
+1. `hotfix/descricao` nasce de `origin/production`.
+2. PR para `production` com **squash**; pipeline e aprovações obrigatórias.
+3. Após o merge, tag de patch `vX.Y.(Z+1)` → `release.yml` → produção.
+4. Leve o fix para `staging` por `git cherry-pick <commit-do-squash>` (se houver homologação).
+5. Se houver uma `release/*` aberta, leve o fix para ela também: `bugfix/*` a partir de `production` (que já contém o hotfix) com PR squash para a release.
+6. O hotfix conta como release publicada para o intervalo do backup em `main` (passo 7 do fluxo regular).
 
 ## Pacotes
 
-- O pacote é gerado a partir do **commit da tag**; como a tag final aponta para o mesmo commit do último RC, o código publicado é **idêntico** ao validado em staging.
+- O pacote é gerado a partir do **commit da tag**, em `production`.
 - Cada pacote recebe atestação (`actions/attest-build-provenance`) verificável com `gh attestation verify`.
-- Para imagens de container, prefira **promover o digest** do RC (re-tag `X.Y.Z-rc.N` → `X.Y.Z`) em vez de rebuild — build once, deploy many.
+- Homologação usa pacotes próprios (`staging-<sha>`), gerados a cada push em `staging`.
 
 ## Rollback
 
-- Rollback = **nova release**, nunca mover `production` para trás nem apagar tags.
-- Opção rápida: redeploy do pacote de uma tag anterior (`workflow_dispatch` no deploy, apenas com tags `v*` existentes).
-- Correção definitiva: `revert:` em `main` ou hotfix, seguindo o fluxo normal.
+- **Versão completa (recomendado):** redeploy do pacote de uma tag anterior (`workflow_dispatch` no deploy, apenas com tags `v*` existentes). Sem commits, sem mover tags.
+- **Uma feature só:** como cada feature é um commit, `git revert <commit-do-squash>` em `hotfix/*` com PR para `production`, seguindo o fluxo de hotfix.
+- Nunca mover `production` para trás nem apagar tags.
 
 ## Changelog
 

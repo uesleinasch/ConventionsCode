@@ -12,7 +12,7 @@ Documentação publicada: <https://uesleinasch.github.io/ConventionsCode/>
 
 | Convenção | ID | Conteúdo |
 |-----------|----|----------|
-| [GitFlow](GitFlow/README.md) | `gitflow` | Branches (`main` / `production`), Conventional Branch, Conventional Commits, release branch strategy, tags `vX.Y.Z` e segurança no GitHub |
+| [GitFlow](GitFlow/README.md) | `gitflow` | Branches (`production` / `staging` / `main`), Conventional Branch, Conventional Commits, release seletiva por squash, tags `vX.Y.Z` e segurança no GitHub |
 | [Código limpo](CleanCode/README.md) | `clean-code` | Nomenclatura, funções e estrutura, comentários só quando inevitáveis, linters (ESLint, Ruff, .editorconfig) e checklist de revisão |
 
 ## Ativação por projeto (opt-in)
@@ -60,6 +60,9 @@ O bloqueio pode ser ajustado depois em `/config` → `conventions-code.blockedRe
 /conventions enable gitflow     # ativa só neste projeto (cria .claude/conventions.json)
 /conventions setup gitflow      # copia workflows e templates (não sobrescreve arquivos)
 /conventions disable gitflow    # desativa neste projeto
+/conventions release off        # o agente só mostra os passos de release (padrão: autorizado)
+/conventions release on         # volta a autorizar
+/conventions main-sync 3        # PR production → main a cada 3 releases (padrão 2)
 
 /conventions enable clean-code
 /conventions setup clean-code <javascript|python|dotnet>   # config de lint da stack
@@ -71,10 +74,14 @@ Commite `.claude/conventions.json` para que o opt-in fique registrado no própri
 
 ### GitFlow: o que é bloqueado quando ativo
 
-- Criação de branch fora de `feature|bugfix|hotfix|chore/<descricao-em-kebab>`; criação manual de `release/*`.
-- Commit com mensagem fora de Conventional Commits; commit, merge ou rebase direto em `main`, `production` e `release/*`.
-- Push para `main`, `production` ou `release/*`; `--force` sem lease; `--all`, `--mirror`, `--tags`; push, criação ou remoção de tags `v*`.
+- Branch fora de `feature|bugfix|hotfix|chore/<descricao-em-kebab>` ou `release/vX.Y.Z`; branch nascendo de `staging` ou `main`.
+- Commit fora de Conventional Commits; commit, merge ou rebase local em `production`, `main` e `release/*`; commit direto em `staging`.
+- Puxar `staging` ou `main` para outra branch (`merge`, `rebase`, `pull`).
+- Push direto em `production` e `main`; force push sem lease; `--all`, `--mirror`, `--tags`; remoção de branches permanentes.
+- Tags `v*` leves, fora de `vX.Y.Z`, movidas ou apagadas.
 - `gh pr create` com título fora do padrão ou rota de branches não permitida.
+- `gh pr create` para `main` vindo de qualquer branch que não seja `production`.
+- Com `/conventions release off`: criar ou enviar `release/*`, criar ou enviar tags `v*`, resetar `staging` e abrir PR de release para `production` ou de backup para `main`.
 
 A guarda local orienta o agente. A proteção definitiva fica nos rulesets e workflows do GitHub — veja [GitFlow/04-seguranca.md](GitFlow/04-seguranca.md).
 

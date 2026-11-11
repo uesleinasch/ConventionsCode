@@ -2,6 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import { checkCommand } from './gitflow/guard'
 import {
+  DEFAULT_MAIN_SYNC_EVERY,
   MARKER_PATH,
   parsePatterns,
   projectState,
@@ -56,6 +57,8 @@ const USAGE = [
   '  enable <convenção>  ativa a convenção SOMENTE neste projeto',
   '  disable <convenção> desativa a convenção neste projeto',
   '  setup <convenção> [stack]  copia os templates para o projeto (não sobrescreve)',
+  '  release on|off      autoriza (padrão) ou não o agente a executar os passos de release do gitflow',
+  '  main-sync <n>       abre o PR production → main a cada n releases (padrão 2)',
   '',
   ...CONVENTIONS.map(c =>
     `  ${c.id}${c.templateVariants ? ` (stacks: ${c.templateVariants.join(', ')})` : ''} — ${c.title}`,
@@ -65,6 +68,19 @@ const USAGE = [
 const findConvention = (id: string | undefined) => CONVENTIONS.find(c => c.id === id)
 
 const activeConventions = (state: ProjectState) => CONVENTIONS.filter(c => state.enabled.has(c.id))
+
+const releaseNote = (state: ProjectState) =>
+  [
+    state.releaseAgent
+      ? 'Autorização de release: ATIVA neste projeto. Quando o usuário pedir uma release ou hotfix, execute os passos de "Uso diário" de GitFlow/05-automacao.md de ponta a ponta, conferindo cada workflow (gh run watch / gh pr checks --watch) antes do próximo passo e parando no primeiro erro.'
+      : 'Autorização de release: INATIVA neste projeto. Para passos de release (release/*, tags v*, PRs para production/main, reset de staging) mostre os comandos ao usuário; ele pode autorizar com /conventions release on.',
+    `Backup em main: a cada ${state.mainSyncEvery} release(s) publicada(s) abra o PR production → main (conte com git tag -l 'v*' --merged origin/production --no-merged origin/main).`,
+  ].join('\n')
+
+async function sectionText($: EngineInterface, convention: Convention, state: ProjectState): Promise<string> {
+  const rules = await rulesOf($, convention)
+  return convention.id === 'gitflow' ? `${rules}\n\n${releaseNote(state)}` : rules
+}
 
 async function rulesOf($: EngineInterface, convention: Convention): Promise<string> {
   const text = await $.fs.read(`${$.plugin.root}/${convention.rulesPath}`)
@@ -76,8 +92,13 @@ async function currentBranch($: EngineInterface, root: string): Promise<string |
   return run.exitCode === 0 ? run.stdout.trim() : undefined
 }
 
-async function guardBash($: EngineInterface, id: string, command: string, root: string): Promise<string | undefined> {
-  if (id === 'gitflow') return checkCommand(command, { currentBranch: () => currentBranch($, root) })
+async function guardBash($: EngineInterface, id: string, command: string, state: ProjectState): Promise<string | undefined> {
+  if (id === 'gitflow') {
+    return checkCommand(command, {
+      currentBranch: () => currentBranch($, state.root),
+      releaseAuthorized: state.releaseAgent,
+    })
+  }
   return undefined
 }
 
@@ -93,7 +114,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: COMMAND,
       description: 'Ativa/desativa convenções (GitFlow etc.) apenas neste projeto',
-      argumentHint: '[status|enable|disable|setup] [convenção]',
+      argumentHint: '[status|enable|disable|setup|release] [convenção|on|off]',
     })
     const state = await projectState($, blockedPatterns).catch(() => undefined)
     if (state) statusLine($, state)
@@ -109,7 +130,7 @@ export const register: Register = (on, options) => {
     const sections = await Promise.all(
       active.map(async c => ({
         id: `conventions-code:${c.id}`,
-        text: `# Convenção ativa neste projeto: ${c.title}\n\n${await rulesOf($, c)}`,
+        text: `# Convenção ativa neste projeto: ${c.title}\n\n${await sectionText($, c, state)}`,
         scope: 'session' as const,
       })),
     )
@@ -124,7 +145,7 @@ export const register: Register = (on, options) => {
     if (!state || guarded.length === 0) return next(e)
 
     for (const convention of guarded) {
-      const issue = await guardBash($, convention.id, e.command, state.root).catch(
+      const issue = await guardBash($, convention.id, e.command, state).catch(
         (error: unknown) => `não foi possível validar o comando (${String(error)}).`,
       )
       if (issue) return { deny: `[conventions-code/${convention.id}] ${issue}` }
@@ -143,10 +164,45 @@ export const register: Register = (on, options) => {
         state.blockedBy
           ? `Bloqueado: o remote/caminho casa com "${state.blockedBy}" (blockedRemotes). Nenhuma convenção é aplicada aqui.`
           : `Ativas: ${active.length > 0 ? active.map(c => c.id).join(', ') : 'nenhuma'} (${MARKER_PATH})`,
+        `Autorização de release do gitflow: ${state.releaseAgent ? 'ativa' : 'inativa'}`,
+        `PR production → main: a cada ${state.mainSyncEvery} release(s)`,
         '',
         USAGE,
       ]
       return { text: lines.join('\n') }
+    }
+
+    if (action === 'release') {
+      if (state.blockedBy) return { text: `Recusado: este projeto casa com o padrão bloqueado "${state.blockedBy}".` }
+      if (!state.enabled.has('gitflow')) return { text: `Ative antes: /${COMMAND} enable gitflow` }
+      if (id !== 'on' && id !== 'off') {
+        return { text: `Autorização de release: ${state.releaseAgent ? 'ativa' : 'inativa'}. Use /${COMMAND} release on|off.` }
+      }
+      const marker = await readMarker($, state.root)
+      const authorized = id === 'on'
+      await writeMarker($, state.root, { ...marker, releaseAgent: authorized })
+      const next = { ...state, releaseAgent: authorized }
+      return {
+        text: authorized
+          ? `Agente autorizado a executar os passos de release do gitflow em ${state.root}.`
+          : `Autorização de release revogada em ${state.root}.`,
+        context: [releaseNote(next)],
+      }
+    }
+
+    if (action === 'main-sync') {
+      if (state.blockedBy) return { text: `Recusado: este projeto casa com o padrão bloqueado "${state.blockedBy}".` }
+      if (!state.enabled.has('gitflow')) return { text: `Ative antes: /${COMMAND} enable gitflow` }
+      const every = Number(id)
+      if (!Number.isInteger(every) || every < 1) {
+        return { text: `PR production → main a cada ${state.mainSyncEvery} release(s). Use /${COMMAND} main-sync <n> (n ≥ 1).` }
+      }
+      const marker = await readMarker($, state.root)
+      await writeMarker($, state.root, { ...marker, mainSyncEvery: every })
+      return {
+        text: `PR production → main a cada ${every} release(s) em ${state.root}.`,
+        context: [releaseNote({ ...state, mainSyncEvery: every })],
+      }
     }
 
     const convention = findConvention(id)
@@ -162,19 +218,29 @@ export const register: Register = (on, options) => {
     const isEnabled = marker.enabled.includes(convention.id)
 
     if (action === 'enable') {
-      if (!isEnabled) await writeMarker($, state.root, { enabled: [...marker.enabled, convention.id] })
+      const enabled = isEnabled ? marker.enabled : [...marker.enabled, convention.id]
+      const next: typeof marker =
+        convention.id === 'gitflow'
+          ? {
+              ...marker,
+              enabled,
+              releaseAgent: marker.releaseAgent ?? true,
+              mainSyncEvery: marker.mainSyncEvery ?? DEFAULT_MAIN_SYNC_EVERY,
+            }
+          : { ...marker, enabled }
+      await writeMarker($, state.root, next)
       statusLine($, { ...state, enabled: new Set([...marker.enabled, convention.id]) })
       return {
         text: `${convention.title} ativada em ${state.root} (${MARKER_PATH}).`,
         context: [
-          `A convenção "${convention.id}" foi ativada SOMENTE neste projeto (${state.root}). A partir de agora siga estas regras:\n\n${await rulesOf($, convention)}`,
+          `A convenção "${convention.id}" foi ativada SOMENTE neste projeto (${state.root}). A partir de agora siga estas regras:\n\n${await sectionText($, convention, state)}`,
         ],
       }
     }
 
     if (action === 'disable') {
       const enabled = marker.enabled.filter(m => m !== convention.id)
-      await writeMarker($, state.root, { enabled })
+      await writeMarker($, state.root, convention.id === 'gitflow' ? { enabled } : { ...marker, enabled })
       statusLine($, { ...state, enabled: new Set(enabled) })
       return {
         text: `${convention.title} desativada em ${state.root}.`,
