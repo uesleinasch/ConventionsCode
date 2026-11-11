@@ -17,13 +17,15 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           work='(feature|bugfix|chore)/[a-z0-9]+(-[a-z0-9]+)*'
-          fixes='(bugfix|hotfix|chore)/[a-z0-9]+(-[a-z0-9]+)*'
+          hotfix='hotfix/[a-z0-9]+(-[a-z0-9]+)*'
           release='release/v[0-9]+\.[0-9]+\.[0-9]+'
           bots='dependabot/.+'
 
           case "$BASE_REF" in
-            main)       allowed="^(${work}|${release}|${bots})$" ;;
-            release/v*) allowed="^(${fixes})$" ;;
+            production) allowed="^(${release}|${hotfix}|${bots})$" ;;
+            release/v*) allowed="^(${work})$" ;;
+            staging)    allowed="^(${work})$" ;;
+            main)       allowed="^(staging|production)$" ;;
             *)
               echo "::error::PRs para '$BASE_REF' não são permitidos."
               exit 1
@@ -32,6 +34,23 @@ jobs:
 
           if [[ ! "$HEAD_REF" =~ $allowed ]]; then
             echo "::error::Branch '$HEAD_REF' não pode abrir PR para '$BASE_REF'. Veja GitFlow/01-branches.md."
+            exit 1
+          fi
+
+  main-sync:
+    if: github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validar que a sincronização reflete production
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$(git rev-parse "origin/$HEAD_REF^{tree}")" != "$(git rev-parse "origin/production^{tree}")" ]; then
+            echo "::error::$HEAD_REF difere de production. Resete staging para production antes de sincronizar main."
             exit 1
           fi
 

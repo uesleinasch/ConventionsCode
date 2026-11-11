@@ -4,52 +4,63 @@ Controles para garantir que **só código revisado, testado e aprovado** chegue 
 
 ## Quem move as refs de release
 
-O **mantenedor** (papel *Admin* ou *Maintain* no repositório) cria `release/v*`, as tags `v*` e atualiza `production` com `git` e `gh`, usando a própria autenticação. Os workflows **não** criam refs: só reagem ao push de tags.
+O **mantenedor** (papel *Admin* ou *Maintain* no repositório) cria `release/v*`, abre e mergeia o PR da release para `production`, cria as tags `v*`, reseta `staging` e sincroniza `main`, com `git` e `gh` e a própria autenticação. Os workflows **não** criam refs: só reagem ao push.
 
 - Não há bot, GitHub App, PAT nem secret de release para configurar.
-- Push feito pelo mantenedor dispara os workflows normalmente; refs criadas por workflows com `GITHUB_TOKEN` não disparariam, por isso a convenção não depende delas.
-- O papel do mantenedor é o **único** na lista de bypass de `production`, `release/v*` (criação) e tags `v*`. Os demais colaboradores só abrem PRs.
-- As validações que impedem uma promoção errada ficam no `release.yml` e nos rulesets, não na disciplina de quem executa.
+- O papel do mantenedor é o **único** no bypass de criação de `release/v*`, de criação de tags `v*` e de force push em `staging`.
+- `production` e `main` não têm bypass: mudam só por PR, inclusive para o mantenedor.
+- O agente do Claude Code só executa esses passos em projetos autorizados (`/conventions release on`); fora disso, mostra os comandos.
 
 ## Rulesets (Settings → Rules → Rulesets)
 
-### `main`
+### `production`
 
 | Regra                                   | Valor                                  |
 |-----------------------------------------|----------------------------------------|
 | Restrict deletions                      | ✅                                     |
 | Block force pushes                      | ✅                                     |
-| Require a pull request                  | ✅ — 1 aprovação (2 para repos críticos) |
+| Require a pull request                  | ✅ — 2 aprovações (1 em times pequenos, 0 em projeto solo) |
 | Dismiss stale approvals on new commits  | ✅                                     |
 | Require review from Code Owners         | ✅                                     |
 | Require approval of the most recent push | ✅                                    |
 | Require conversation resolution         | ✅                                     |
 | Required status checks                  | `pr-checks`, `ci`, `security`          |
 | Require signed commits                  | ✅                                     |
-| Allowed merge methods                   | Squash, Merge                          |
+| Allowed merge methods                   | Merge (release), Squash (hotfix, Dependabot) |
 | Bypass                                  | **ninguém**                            |
-
-> **Projeto com um único mantenedor:** o GitHub não deixa o autor aprovar o próprio PR. Use **0 aprovações** e desligue *Require review from Code Owners* e *Require approval of the most recent push*; mantenha PR obrigatório, status checks, conversation resolution e commits assinados. Volte para 1 aprovação quando houver um segundo revisor.
-
-### `production`
-
-| Regra               | Valor                                    |
-|---------------------|------------------------------------------|
-| Restrict updates    | ✅ — bypass: **somente** o papel do mantenedor (Admin/Maintain) |
-| Restrict deletions  | ✅                                       |
-| Block force pushes  | ✅ (sem bypass)                          |
 
 ### `release/v*`
 
 | Regra                       | Valor                                          |
 |-----------------------------|------------------------------------------------|
 | Restrict creations          | ✅ — bypass: mantenedor                         |
-| Require a pull request      | ✅ — 1 aprovação, Code Owners (0 em projeto solo) |
-| Required status checks      | `pr-checks`, `ci`, `security`                  |
+| Require a pull request      | ✅ — 1 aprovação (0 em projeto solo)            |
+| Required status checks      | `pr-checks`, `ci`                              |
 | Require signed commits      | ✅                                             |
 | Block force pushes          | ✅                                             |
-| Restrict deletions          | ✅ — bypass: mantenedor (limpeza após back-merge) |
-| Allowed merge methods       | Squash (PRs) — back-merge é na `main`          |
+| Restrict deletions          | ✅ — bypass: mantenedor (limpeza após a publicação) |
+| Allowed merge methods       | **Squash**                                     |
+
+O `git revert` de uma feature reprovada na release é feito pelo mantenedor com PR (ou push direto via bypass, se o time aceitar).
+
+### `staging` (se houver homologação)
+
+| Regra               | Valor                                              |
+|---------------------|----------------------------------------------------|
+| Restrict deletions  | ✅                                                 |
+| Block force pushes  | ✅ — bypass: mantenedor (reset após cada publicação) |
+| Require a pull request | ❌ — merges de features entram por push direto  |
+
+### `main`
+
+| Regra                   | Valor                                  |
+|-------------------------|----------------------------------------|
+| Restrict deletions      | ✅                                     |
+| Block force pushes      | ✅                                     |
+| Require a pull request  | ✅ — 0 aprovações (só sincronização)   |
+| Required status checks  | `pr-checks` (inclui `main-sync`: conteúdo idêntico a `production`) |
+| Allowed merge methods   | Merge                                  |
+| Bypass                  | **ninguém**                            |
 
 ### Tags `refs/tags/v*`
 
@@ -59,24 +70,26 @@ O **mantenedor** (papel *Admin* ou *Maintain* no repositório) cria `release/v*`
 | Restrict updates    | ✅ — sem bypass                |
 | Restrict deletions  | ✅ — sem bypass                |
 
-Resultado: ninguém (nem admin) move uma tag publicada ou reescreve `production`; só o mantenedor cria versões, e o `release.yml` recusa tags que não passam nas validações.
+Resultado: ninguém (nem admin) move uma tag publicada nem altera `production` sem PR revisado; só o mantenedor cria versões, e o `release.yml` recusa tags que não passam nas validações.
 
 No bypass de cada ruleset: *Bypass list → Add bypass → Repository admin* (ou *Maintain*), modo **Always**.
 
+> **Projeto com um único mantenedor:** o GitHub não deixa o autor aprovar o próprio PR. Use **0 aprovações** e desligue *Require review from Code Owners* e *Require approval of the most recent push*; mantenha PR obrigatório, status checks, conversation resolution e commits assinados.
+
 ## Environments (Settings → Environments)
 
-| Environment        | Proteção                                                    | Uso                       |
-|--------------------|-------------------------------------------------------------|---------------------------|
-| `staging`          | Deployment refs: tags `v*-rc.*`                             | Deploy dos RCs            |
-| `production`       | Deployment refs: tags `v*.*.*`; secrets de produção só aqui; *required reviewers* opcional (time de release, *prevent self-review*) | Deploy das versões finais |
+| Environment   | Proteção                                                    | Uso                        |
+|---------------|-------------------------------------------------------------|----------------------------|
+| `staging`     | Deployment branches: `staging`                              | Deploy de homologação      |
+| `production`  | Deployment refs: tags `v*.*.*`; secrets de produção só aqui; *required reviewers* opcional (time de release, *prevent self-review*) | Deploy das versões publicadas |
 
-Em projeto solo, deixe `production` sem *required reviewers* (ou com você mesmo, sem *prevent self-review*): a aprovação já acontece quando você cria a tag final.
+Em projeto solo, deixe `production` sem *required reviewers*: a aprovação já acontece no PR e na criação da tag.
 
 Secrets de produção ficam **apenas** no Environment `production` — nunca em secrets do repositório.
 
 ## Assinatura
 
-- **Commits**: obrigatórios assinados em `main` e `release/*` (SSH ou GPG). Squash/merge feitos pela UI do GitHub já saem assinados.
+- **Commits**: obrigatórios assinados em `production`, `main` e `release/*` (SSH ou GPG). Squash/merge feitos pela UI do GitHub já saem assinados.
   ```bash
   git config --global gpg.format ssh
   git config --global user.signingkey ~/.ssh/id_ed25519.pub
@@ -105,7 +118,7 @@ Secrets de produção ficam **apenas** no Environment `production` — nunca em 
 |---------------------------------------|-----------------------------------------------|
 | Secret scanning + **push protection** | Settings → Code security                      |
 | Dependency review (bloqueia PR com CVE alta) | `security.yml` em PRs                  |
-| CodeQL (SAST)                         | `security.yml` em PRs, `main` e semanal       |
+| CodeQL (SAST)                         | `security.yml` em PRs, `production` e semanal |
 | Dependabot alerts + updates           | `dependabot.yml`                              |
 
 ## Conta e organização

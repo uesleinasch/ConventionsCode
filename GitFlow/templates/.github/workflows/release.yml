@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
 
 permissions:
   contents: read
@@ -18,8 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
-      base: ${{ steps.meta.outputs.base }}
-      prerelease: ${{ steps.meta.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,34 +26,20 @@ jobs:
       - id: meta
         env:
           TAG: ${{ github.ref_name }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           fail() { echo "::error::$1"; exit 1; }
 
           git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
           [ "$(git cat-file -t "refs/tags/$TAG")" = "tag" ] || fail "$TAG não é uma tag anotada."
 
-          base="${TAG%%-rc.*}"
           commit=$(git rev-list -n1 "$TAG")
+          git merge-base --is-ancestor "$commit" origin/production || fail "$TAG não está em production."
 
-          if [[ "$TAG" == *-rc.* ]]; then
-            prerelease=true
-            git merge-base --is-ancestor "$commit" "origin/release/$base" || fail "$TAG não pertence a release/$base."
-          else
-            prerelease=false
-            [ "$commit" = "$(git rev-parse origin/production)" ] || fail "$TAG não aponta para o HEAD de production."
+          previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$commit^" 2>/dev/null || echo v0.0.0)
+          [ "$(printf '%s\n%s\n' "$previous" "$TAG" | sort -V | tail -n1)" = "$TAG" ] && [ "$previous" != "$TAG" ] \
+            || fail "$TAG não é maior que a versão anterior ($previous)."
 
-            rc=$(git tag -l "$base-rc.*" --sort=-v:refname | head -n1)
-            [ -n "$rc" ] || fail "Nenhum release candidate para $base."
-            [ "$(git rev-list -n1 "$rc")" = "$commit" ] || fail "$TAG não está no commit do último RC ($rc)."
-            gh release view "$rc" >/dev/null 2>&1 || fail "Pre-release $rc não encontrado (build do RC falhou ou não terminou)."
-          fi
-
-          {
-            echo "version=${TAG#v}"
-            echo "base=$base"
-            echo "prerelease=$prerelease"
-          } >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
   ci:
     needs: verify
@@ -113,35 +96,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
         run: |
-          if [ "$PRERELEASE" = "true" ]; then
-            git cliff --unreleased --strip header > notes.md
-            flags=(--prerelease)
-          else
-            git cliff --latest --strip header > notes.md
-            flags=(--latest)
-          fi
-          gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-file notes.md "${flags[@]}"
-
-  deploy-staging:
-    needs: [verify, publish]
-    if: needs.verify.outputs.prerelease == 'true'
-    runs-on: ubuntu-latest
-    environment: staging
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: package
-          path: dist/
-      - run: ./scripts/deploy.sh staging dist/
+          git cliff --latest --strip header > notes.md
+          gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-file notes.md --latest
 
   deploy-production:
     needs: [verify, publish]
-    if: needs.verify.outputs.prerelease == 'false'
     runs-on: ubuntu-latest
     environment: production
     steps:

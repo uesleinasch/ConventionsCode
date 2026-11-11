@@ -2,11 +2,12 @@ import type { EngineInterface } from 'claude-code'
 
 export const MARKER_PATH = '.claude/conventions.json'
 
-export type Marker = { enabled: string[] }
+export type Marker = { enabled: string[]; releaseAgent?: boolean }
 
 export type ProjectState = {
   root: string
   enabled: ReadonlySet<string>
+  releaseAgent: boolean
   blockedBy: string | undefined
 }
 
@@ -22,7 +23,8 @@ export async function readMarker($: EngineInterface, root: string): Promise<Mark
   if (typeof text !== 'string') return { enabled: [] }
   try {
     const parsed = JSON.parse(text) as Partial<Marker>
-    return { enabled: Array.isArray(parsed.enabled) ? parsed.enabled.filter(m => typeof m === 'string') : [] }
+    const enabled = Array.isArray(parsed.enabled) ? parsed.enabled.filter(m => typeof m === 'string') : []
+    return parsed.releaseAgent === true ? { enabled, releaseAgent: true } : { enabled }
   } catch {
     return { enabled: [] }
   }
@@ -51,7 +53,7 @@ export async function blockedPattern(
 export async function projectState($: EngineInterface, patterns: readonly string[]): Promise<ProjectState> {
   const root = await projectRoot($)
   const blockedBy = await blockedPattern($, root, patterns)
-  if (blockedBy) return { root, enabled: new Set(), blockedBy }
+  if (blockedBy) return { root, enabled: new Set(), releaseAgent: false, blockedBy }
   const marker = await readMarker($, root)
-  return { root, enabled: new Set(marker.enabled), blockedBy }
+  return { root, enabled: new Set(marker.enabled), releaseAgent: marker.releaseAgent === true, blockedBy }
 }

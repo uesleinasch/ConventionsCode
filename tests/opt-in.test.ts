@@ -107,3 +107,28 @@ test('clean-code injeta regras próprias, não bloqueia Bash e exige stack no se
   const again = await $.command.run(run('setup clean-code python'))
   expect(again.text).toMatch(/= ruff\.toml \(já existia/)
 })
+
+test('release on/off autoriza o agente só no projeto com gitflow ativo', async ($, on) => {
+  const fake: Fake = { files: new Map(), branch: 'production', remotes: '' }
+  fakeHost(on, fake)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  const TAG = { tool: 'Bash', command: 'git tag -a v1.0.0 -m "Release v1.0.0"' } as const
+
+  const notEnabled = await $.command.run(run('release on'))
+  expect(notEnabled.text).toMatch(/enable gitflow/)
+
+  await $.command.run(run('enable gitflow'))
+  const locked = await $.tool.call(TAG)
+  expect(locked.deny ?? locked.text).toMatch(/release on/)
+
+  const granted = await $.command.run(run('release on'))
+  expect(granted.text).toMatch(/autorizado/)
+  expect(JSON.parse(fake.files.get(MARKER)!)).toEqual({ enabled: ['gitflow'], releaseAgent: true })
+  const freed = await $.tool.call(TAG)
+  expect(freed.deny).toBeUndefined()
+
+  await $.command.run(run('release off'))
+  expect(JSON.parse(fake.files.get(MARKER)!)).toEqual({ enabled: ['gitflow'] })
+  const lockedAgain = await $.tool.call(TAG)
+  expect(lockedAgain.deny ?? lockedAgain.text).toMatch(/release on/)
+})
