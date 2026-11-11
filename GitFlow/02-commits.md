@@ -71,5 +71,5 @@ Configuração do repositório: *Settings → General → Pull Requests → Allo
 
 ## Commits que não entram no changelog
 
-- Merge commits da release e da sincronização de `main` (`Merge pull request #N ...`) — não convencionais, filtrados.
+- Merge commits da release e do backup em `main` (`Merge pull request #N ...`) — não convencionais, filtrados.
 - `chore(release): ...` — gerados pelo processo de release.

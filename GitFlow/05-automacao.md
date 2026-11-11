@@ -6,11 +6,11 @@ Workflows em [`templates/.github/workflows/`](https://github.com/uesleinasch/Con
 
 | Workflow         | Gatilho                                         | O que faz                                                              |
 |------------------|-------------------------------------------------|------------------------------------------------------------------------|
-| `pr-checks.yml`  | `pull_request`                                  | Valida rota origem × destino, título do PR e, em PR para `main`, se o conteúdo é idêntico a `production` |
+| `pr-checks.yml`  | `pull_request`                                  | Valida rota origem × destino, título do PR e, em PR para `main`, se o HEAD de `production` é uma versão publicada |
 | `ci.yml`         | `pull_request`, push `production`/`release/v*`, `workflow_call` | Lint e testes                                     |
 | `security.yml`   | `pull_request`, push `production`, semanal      | Dependency review e CodeQL                                             |
 | `staging.yml`    | push em `staging`                               | CI, pacote `staging-<sha>` e deploy em homologação                     |
-| `release.yml`    | push de tag `vX.Y.Z`                            | Validação da tag, CI, pacote, atestação, GitHub Release, deploy em produção |
+| `release.yml`    | push de tag `vX.Y.Z`                            | Validação da tag, CI, pacote, atestação, GitHub Release, deploy em produção e aviso do backup em `main` |
 
 ```mermaid
 flowchart TD
@@ -18,7 +18,7 @@ flowchart TD
     F -->|PR squash| R[release/vX.Y.Z: ci]
     R -->|PR merge commit| P[production: ci + security]
     P -->|git push tag vX.Y.Z| T[release.yml: produção]
-    T -->|reset staging + PR sync| M[main]
+    T -->|a cada N releases: PR production → main| M[main]
 ```
 
 ## Pontos de customização
@@ -41,8 +41,9 @@ Sem homologação, apague `staging.yml` e o Environment `staging`.
    - [ ] [`git-cliff`](https://git-cliff.org/docs/installation) instalado (conferência do bump).
    - [ ] Assinatura de commits e tags configurada ([04-seguranca.md](04-seguranca.md#assinatura)).
 2. **Branches**
-   - [ ] `production` a partir do commit que está no ar, como branch **default**, com tag `vX.Y.Z` (ou `v0.1.0`).
+   - [ ] `production` a partir do commit que está no ar, com tag `vX.Y.Z` (ou `v0.1.0`). A branch default do repositório pode continuar a mesma.
    - [ ] `main` e, se houver homologação, `staging` criadas a partir de `production`.
+   - [ ] `dependabot.yml` com `target-branch: production` (já no template).
    - [ ] Squash com *Default to pull request title*; merge commit habilitado; rebase desabilitado.
    - [ ] *Automatically delete head branches* ligado (as permanentes ficam protegidas pelo ruleset de deleção).
 3. **Rulesets** — conforme [04-seguranca.md](04-seguranca.md), com o papel do mantenedor no bypass.
@@ -53,12 +54,12 @@ Sem homologação, apague `staging.yml` e o Environment `staging`.
    - [ ] Trocar refs de actions por SHA.
 6. **Code security** — secret scanning, push protection, Dependabot alerts.
 7. **Claude Code** (opcional)
-   - [ ] `/conventions enable gitflow`.
-   - [ ] `/conventions release on` para o agente executar os passos de release.
+   - [ ] `/conventions enable gitflow` — grava `releaseAgent: true` e `mainSyncEvery: 2` em `.claude/conventions.json`.
+   - [ ] Ajustar o intervalo do backup com `/conventions main-sync <n>` (ou a variável de repositório `MAIN_SYNC_EVERY`, que tem prioridade no `release.yml`).
 8. **Teste de fumaça**
    - [ ] `feature/teste-fluxo` → merge em `staging` → deploy de homologação.
    - [ ] `release/v0.x.0` → PR squash da feature → PR para `production` → tag → deploy em produção.
-   - [ ] Reset de `staging` e PR de sincronização para `main`.
+   - [ ] Reset de `staging`; na N-ésima release, PR `production → main`.
 
 ## Uso diário
 
@@ -150,12 +151,21 @@ gh run watch
 ```bash
 git fetch origin
 git push --force-with-lease origin origin/production:staging
-gh pr create --base main --head staging --title "chore(release): sincroniza main com $VERSION"
-gh pr checks staging --watch
-gh pr merge staging --merge
 ```
 
-Sem homologação, use `--head production` no PR de sincronização. Quem tinha features em teste que não entraram faz o merge delas em `staging` de novo.
+Quem tinha features em teste que não entraram faz o merge delas em `staging` de novo. Sem homologação, não há limpeza.
+
+### Backup em `main`
+
+A cada N releases publicadas (padrão 2; hotfix conta), abra o PR `production → main`. O `release.yml` avisa quando o intervalo é atingido.
+
+```bash
+git fetch origin --tags
+git tag -l 'v[0-9]*' --merged origin/production --no-merged origin/main
+gh pr create --base main --head production --title "chore(release): backup estável $VERSION"
+gh pr checks production --watch
+gh pr merge production --merge
+```
 
 ### Hotfix
 
@@ -177,22 +187,33 @@ git push origin "$VERSION"
 gh run watch
 ```
 
-Depois do deploy, leve o fix para `staging` e sincronize `main` a partir de `production` (`staging` agora tem features em teste):
+Depois do deploy, leve o fix para `staging` e confira o intervalo do [backup em `main`](#backup-em-main):
 
 ```bash
 git switch staging && git reset --hard origin/staging
 git cherry-pick origin/production
 git push origin staging
-gh pr create --base main --head production --title "chore(release): sincroniza main com $VERSION"
-gh pr merge production --merge
 ```
 
 ## Execução pelo agente
 
-Com `/conventions release on`, o agente executa os passos acima quando você pede (ex.: "publique a release v1.4.0 com as features proj-123 e proj-456"):
+Por padrão o agente executa os passos acima quando você pede (ex.: "publique a release v1.4.0 com as features proj-123 e proj-456"):
 
 - segue a ordem desta seção, um passo por vez;
 - espera cada workflow ou check terminar (`gh run watch`, `gh pr checks --watch`) antes do próximo;
+- depois de publicar, confere o intervalo e abre o PR `production → main` quando chegar a vez;
 - para no primeiro erro e reporta, sem tentar contornar proteção.
 
-A autorização fica em `.claude/conventions.json` (`"releaseAgent": true`). Se o arquivo for commitado, a autorização vale para todos que usam o plugin no repositório; para mantê-la só sua, não commite essa linha. `/conventions release off` revoga.
+A configuração fica em `.claude/conventions.json`, gravada ao ativar a convenção:
+
+```json
+{
+  "enabled": ["gitflow"],
+  "releaseAgent": true,
+  "mainSyncEvery": 2
+}
+```
+
+- `/conventions release off` grava `"releaseAgent": false`: o agente passa a só mostrar os comandos. `/conventions release on` volta a autorizar.
+- `/conventions main-sync <n>` muda o intervalo do backup em `main`.
+- Commitar o arquivo compartilha a configuração com todos que usam o plugin no repositório.

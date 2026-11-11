@@ -4,12 +4,12 @@ Controles para garantir que **só código revisado, testado e aprovado** chegue 
 
 ## Quem move as refs de release
 
-O **mantenedor** (papel *Admin* ou *Maintain* no repositório) cria `release/v*`, abre e mergeia o PR da release para `production`, cria as tags `v*`, reseta `staging` e sincroniza `main`, com `git` e `gh` e a própria autenticação. Os workflows **não** criam refs: só reagem ao push.
+O **mantenedor** (papel *Admin* ou *Maintain* no repositório) cria `release/v*`, abre e mergeia o PR da release para `production`, cria as tags `v*`, reseta `staging` e abre o PR `production → main`, com `git` e `gh` e a própria autenticação. Os workflows **não** criam refs: só reagem ao push.
 
 - Não há bot, GitHub App, PAT nem secret de release para configurar.
 - O papel do mantenedor é o **único** no bypass de criação de `release/v*`, de criação de tags `v*` e de force push em `staging`.
 - `production` e `main` não têm bypass: mudam só por PR, inclusive para o mantenedor.
-- O agente do Claude Code só executa esses passos em projetos autorizados (`/conventions release on`); fora disso, mostra os comandos.
+- O agente do Claude Code executa esses passos por padrão em projetos com a convenção ativa (autorização gravada em `.claude/conventions.json`); com `/conventions release off`, só mostra os comandos.
 
 ## Rulesets (Settings → Rules → Rulesets)
 
@@ -57,8 +57,8 @@ O `git revert` de uma feature reprovada na release é feito pelo mantenedor com 
 |-------------------------|----------------------------------------|
 | Restrict deletions      | ✅                                     |
 | Block force pushes      | ✅                                     |
-| Require a pull request  | ✅ — 0 aprovações (só sincronização)   |
-| Required status checks  | `pr-checks` (inclui `main-sync`: conteúdo idêntico a `production`) |
+| Require a pull request  | ✅ — 1 aprovação (0 em projeto solo)   |
+| Required status checks  | `pr-checks` (inclui `main-sync`: origem `production` com HEAD tagueado `vX.Y.Z`) |
 | Allowed merge methods   | Merge                                  |
 | Bypass                  | **ninguém**                            |
 

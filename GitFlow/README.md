@@ -10,18 +10,20 @@ Plataforma de referência: **GitHub** (Rulesets, Environments, GitHub Actions). 
 2. **`staging` é destino, nunca origem.** Recebe merges livres para teste, mas nunca é puxada para outra branch nem vira base de nada.
 3. **Só o aprovado entra na release.** Cada feature aprovada vira **um commit** na `release/vX.Y.Z` (squash). As reprovadas não recebem PR.
 4. **Produção muda só por PR.** `production` recebe apenas `release/vX.Y.Z` (merge commit) e `hotfix/*` (squash). Cada publicação ganha uma tag `vX.Y.Z`.
-5. **`main` é backup estável.** Depois de cada publicação ela é sincronizada com `production` e nunca recebe código ainda não publicado.
+5. **`main` é o backup estável.** Só recebe PR de `production`, sempre numa versão publicada (com tag), a cada N releases (padrão 2). Nenhum outro caminho chega nela.
 6. **Tudo é auditável.** Commits assinados, tags anotadas e atestação de proveniência dos pacotes.
 
 ## Branches permanentes
 
 | Branch       | Papel                                                                 | Quem atualiza                                  |
 |--------------|-----------------------------------------------------------------------|------------------------------------------------|
-| `production` | Branch **default**. Espelho do que está **em produção**; origem de todo o trabalho. | PR de `release/vX.Y.Z` (merge commit) ou `hotfix/*` (squash) |
+| `production` | Branch **principal**. Espelho do que está **em produção**; origem de todo o trabalho. | PR de `release/vX.Y.Z` (merge commit) ou `hotfix/*` (squash) |
 | `staging`    | **Opcional.** Homologação integrada: várias features em teste ao mesmo tempo. | Merge livre de `feature/*`, `bugfix/*`, `chore/*`; resetada para `production` após cada publicação |
-| `main`       | **Backup estável**: cópia de `production`.                            | PR de sincronização após cada publicação       |
+| `main`       | **Backup estável e seguro**: só versões publicadas.                  | PR de `production` a cada N releases (padrão 2) |
 
-Quem não usa homologação simplesmente não cria `staging`: as features vão direto da revisão para a release, e `main` é sincronizada a partir de `production`.
+Quem não usa homologação simplesmente não cria `staging`: as features vão direto da revisão para a release.
+
+A branch default do repositório não precisa mudar: nos PRs, informe sempre `--base`.
 
 ## Visão do fluxo
 
@@ -35,7 +37,7 @@ flowchart LR
     P -- "branch" --> H["hotfix/*"]
     H -- "PR squash + tag" --> P
     P -- "reset" --> S
-    S -- "PR sincronização" --> M[main]
+    P -- "PR a cada N releases" --> M[main]
 ```
 
 Ciclo resumido:
@@ -46,11 +48,11 @@ Ciclo resumido:
 4. Cada feature aprovada abre PR para a release com **squash**. Reprovadas ficam de fora.
 5. Validação final: `staging` é resetada para a release e passa por smoke test.
 6. PR `release/vX.Y.Z → production` (merge commit). Após o merge, tag `vX.Y.Z` → build, atestação, GitHub Release e deploy em **produção**.
-7. `staging` é resetada para `production` e `main` recebe o PR de sincronização.
+7. `staging` é resetada para `production`. A cada N releases publicadas (padrão 2), PR `production → main`.
 
 Hotfix: `hotfix/*` nasce de `production`, vai por PR (squash) direto para `production`, recebe tag de patch e é levado para `staging` por cherry-pick.
 
-O agente pode executar os passos do mantenedor quando autorizado no projeto (`/conventions release on`).
+O agente executa os passos do mantenedor por padrão (autorização gravada em `.claude/conventions.json`; `/conventions release off` revoga).
 
 ## Documentos
 

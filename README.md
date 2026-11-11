@@ -60,8 +60,9 @@ O bloqueio pode ser ajustado depois em `/config` → `conventions-code.blockedRe
 /conventions enable gitflow     # ativa só neste projeto (cria .claude/conventions.json)
 /conventions setup gitflow      # copia workflows e templates (não sobrescreve arquivos)
 /conventions disable gitflow    # desativa neste projeto
-/conventions release on         # autoriza o agente a executar os passos de release do gitflow
-/conventions release off        # revoga a autorização
+/conventions release off        # o agente só mostra os passos de release (padrão: autorizado)
+/conventions release on         # volta a autorizar
+/conventions main-sync 3        # PR production → main a cada 3 releases (padrão 2)
 
 /conventions enable clean-code
 /conventions setup clean-code <javascript|python|dotnet>   # config de lint da stack
@@ -79,7 +80,8 @@ Commite `.claude/conventions.json` para que o opt-in fique registrado no própri
 - Push direto em `production` e `main`; force push sem lease; `--all`, `--mirror`, `--tags`; remoção de branches permanentes.
 - Tags `v*` leves, fora de `vX.Y.Z`, movidas ou apagadas.
 - `gh pr create` com título fora do padrão ou rota de branches não permitida.
-- Sem `/conventions release on`: criar ou enviar `release/*`, criar ou enviar tags `v*`, resetar `staging` e abrir PR de release/sincronização para `production` ou `main`.
+- `gh pr create` para `main` vindo de qualquer branch que não seja `production`.
+- Com `/conventions release off`: criar ou enviar `release/*`, criar ou enviar tags `v*`, resetar `staging` e abrir PR de release para `production` ou de backup para `main`.
 
 A guarda local orienta o agente. A proteção definitiva fica nos rulesets e workflows do GitHub — veja [GitFlow/04-seguranca.md](GitFlow/04-seguranca.md).
 

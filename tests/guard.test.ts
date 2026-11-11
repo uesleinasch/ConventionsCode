@@ -190,9 +190,9 @@ describe('gh pr create', () => {
   test('valida título e rota do PR', async () => {
     await allowed('gh pr create --base release/v1.4.0 --title "feat(report): adiciona CSV"', 'feature/x')
     await allowed('gh pr create --base staging --title "feat(report): adiciona CSV"', 'feature/x')
-    await allowed('gh pr create -t "fix(auth): corrige token"', 'hotfix/token')
+    await allowed('gh pr create -B production -t "fix(auth): corrige token"', 'hotfix/token')
     await denied('gh pr create --base release/v1.4.0 --title "Adiciona CSV"', 'feature/x', /título/)
-    await denied('gh pr create --title "feat: x"', 'feature/x', /production/)
+    await denied('gh pr create --title "feat: x"', 'feature/x', /backup estável/)
     await denied('gh pr create --base main --title "feat: x"', 'feature/x', /main/)
     await denied('gh pr create --base release/v1.0.0 --title "fix: x"', 'hotfix/token')
   })
@@ -200,8 +200,9 @@ describe('gh pr create', () => {
   test('PRs de release e sincronização exigem autorização', async () => {
     await denied('gh pr create --base production --head release/v1.4.0 --title "chore(release): publica v1.4.0"', 'feature/x', /\/conventions release on/)
     await authorized('gh pr create --base production --head release/v1.4.0 --title "chore(release): publica v1.4.0"')
-    await authorized('gh pr create --base main --head staging --title "chore(release): sincroniza main com v1.4.0"')
-    await denied('gh pr create --base main --head staging --title "chore(release): sincroniza main"', 'feature/x', /\/conventions release on/)
+    await authorized('gh pr create --base main --head production --title "chore(release): backup estável v1.4.0"')
+    await denied('gh pr create --base main --head production --title "chore(release): backup estável"', 'feature/x', /\/conventions release on/)
+    await denied('gh pr create --base main --head staging --title "chore(release): backup"', 'feature/x', /só recebe PR de production/, true)
   })
 })
 
@@ -212,7 +213,7 @@ test('comandos do Uso diário passam com autorização', async () => {
   await authorized('gh pr create --base production --head release/v1.4.0 --title "chore(release): publica v1.4.0"')
   await authorized('git tag -a "v1.4.0" origin/production -m "Release v1.4.0" && git push origin "v1.4.0"')
   await authorized('git switch staging && git reset --hard origin/staging && git cherry-pick origin/production && git push origin staging', 'production')
-  await authorized('gh pr create --base main --head production --title "chore(release): sincroniza main com v1.4.1"')
+  await authorized('gh pr create --base main --head production --title "chore(release): backup estável v1.4.1"')
 })
 
 test('ignora comandos que não são git/gh', async () => {

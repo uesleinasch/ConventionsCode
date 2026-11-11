@@ -234,12 +234,12 @@ async function checkPullRequestCreate(scan: Scan): Promise<string | undefined> {
     const titleIssue = checkCommitHeader(title)
     if (titleIssue) return `título do PR: ${titleIssue}`
   }
-  const base = valueOf(args, ['--base', '-B']) ?? PRODUCTION
+  const base = valueOf(args, ['--base', '-B']) ?? BACKUP
   const head = valueOf(args, ['--head', '-H']) ?? (await currentBranch(scan))
   if (!head) return undefined
   const routeIssue = checkPullRequestRoute(head, base)
   if (routeIssue) return routeIssue
-  if ((base === BACKUP || base === PRODUCTION) && (head === STAGING || head === PRODUCTION || isReleaseBranch(head)) && !scan.ctx.releaseAuthorized) {
+  if ((base === BACKUP || (base === PRODUCTION && isReleaseBranch(head))) && !scan.ctx.releaseAuthorized) {
     return `PR de ${head} para ${base} ${RELEASE_LOCKED}`
   }
   return undefined

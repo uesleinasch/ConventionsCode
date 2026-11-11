@@ -124,9 +124,9 @@ export function checkPullRequestRoute(head: string, base: string): string | unde
     return isWork ? undefined : `PR de "${head}" para ${base} não é permitido (aceita feature/*, bugfix/*, chore/*).`
   }
   if (base === BACKUP) {
-    return head === STAGING || head === PRODUCTION
+    return head === PRODUCTION
       ? undefined
-      : `${BACKUP} só recebe a sincronização de ${STAGING} (ou ${PRODUCTION}) após uma publicação.`
+      : `${BACKUP} é o backup estável: só recebe PR de ${PRODUCTION}. Para trabalho, use --base release/vX.Y.Z, --base ${STAGING} ou --base ${PRODUCTION} (hotfix).`
   }
   if (base === STAGING) {
     return isWork ? undefined : `PR de "${head}" para ${STAGING} não é permitido (aceita feature/*, bugfix/*, chore/*).`

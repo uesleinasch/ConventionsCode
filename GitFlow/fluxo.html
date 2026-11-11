@@ -173,7 +173,7 @@ th { color: var(--muted); font-weight: 600; }
 <body>
 <main>
   <h1>Fluxo GitFlow</h1>
-  <p class="lead">Tudo nasce de <code>production</code>. Features são testadas em <code>staging</code> (opcional), só as aprovadas entram na <code>release/vX.Y.Z</code> por squash, a release vai para <code>production</code> por PR e ganha uma tag. Depois, <code>staging</code> é resetada e <code>main</code> recebe a cópia estável.</p>
+  <p class="lead">Tudo nasce de <code>production</code>. Features são testadas em <code>staging</code> (opcional), só as aprovadas entram na <code>release/vX.Y.Z</code> por squash, a release vai para <code>production</code> por PR e ganha uma tag. Depois, <code>staging</code> é resetada. A cada N releases (padrão 2), <code>main</code> recebe o backup estável por PR de <code>production</code>, o único caminho até ela.</p>
 
   <h2>Fluxo regular</h2>
   <p class="lead">Clique em um número no diagrama ou no título de um passo para destacá-lo.</p>
@@ -182,7 +182,7 @@ th { color: var(--muted); font-weight: 600; }
     <button type="button" id="theme">Alternar tema</button>
   </div>
   <div class="panel diagram">
-    <svg id="flow" viewBox="0 0 1000 400" role="img" aria-label="Diagrama do fluxo regular: feature nasce de production, vai para staging, entra na release por squash, release vai para production com tag, staging é resetada e main sincronizada">
+    <svg id="flow" viewBox="0 0 1000 400" role="img" aria-label="Diagrama do fluxo regular: feature nasce de production, vai para staging, entra na release por squash, release vai para production com tag, staging é resetada e main recebe backup de production a cada N releases">
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
           <path d="M0 0L10 5L0 10z" style="fill: var(--muted)"/>
@@ -257,11 +257,19 @@ th { color: var(--muted); font-weight: 600; }
         <path class="reset" d="M706 322C760 250 760 130 774 118" marker-end="url(#arrow)"/>
         <circle class="commit stg" cx="780" cy="110" r="7"/>
         <text class="small" x="792" y="124">reset = production</text>
-        <path class="line main" d="M780 110C805 110 805 40 830 40"/>
-        <circle class="commit main" cx="838" cy="40" r="9"/>
-        <circle class="commit main" cx="838" cy="40" r="4"/>
-        <text class="small" x="852" y="66">PR sync</text>
         <g class="marker"><circle cx="752" cy="190" r="11"/><text x="752" y="194" text-anchor="middle">7</text></g>
+      </g>
+
+      <g data-step="8">
+        <circle class="commit prod" cx="880" cy="330" r="9"/>
+        <circle class="commit prod" cx="880" cy="330" r="4"/>
+        <g class="tag"><rect x="846" y="342" width="68" height="20" rx="10"/><text x="880" y="356" text-anchor="middle">v1.5.0</text></g>
+        <path class="line main" d="M880 330C930 330 930 40 960 40" marker-end="url(#arrow)"/>
+        <circle class="commit main" cx="966" cy="40" r="9"/>
+        <circle class="commit main" cx="966" cy="40" r="4"/>
+        <text class="small" x="952" y="66" text-anchor="end">PR production → main</text>
+        <text class="small" x="952" y="80" text-anchor="end">a cada 2 releases</text>
+        <g class="marker"><circle cx="900" cy="190" r="11"/><text x="900" y="194" text-anchor="middle">8</text></g>
       </g>
     </svg>
     <div class="legend">
@@ -269,11 +277,11 @@ th { color: var(--muted); font-weight: 600; }
       <span style="--c: var(--release)">release/v*</span>
       <span style="--c: var(--work)">feature/*</span>
       <span style="--c: var(--stg)">staging</span>
-      <span style="--c: var(--main)">main</span>
+      <span style="--c: var(--main)">main (backup)</span>
       <span style="--c: repeating-linear-gradient(90deg, var(--stg) 0 5px, transparent 5px 9px)">reset de staging</span>
     </div>
   </div>
-  <p class="note">Sem homologação: pule os passos 2 e 5, e no passo 7 o PR de sincronização é <code>production → main</code>.</p>
+  <p class="note">Sem homologação: pule os passos 2, 5 e 7. O backup em <code>main</code> (passo 8) é igual nos dois casos.</p>
 
   <h2>Quem faz o quê</h2>
   <div class="who">
@@ -290,9 +298,10 @@ th { color: var(--muted); font-weight: 600; }
       <h3>Mantenedor (ou agente autorizado)</h3>
       <ul>
         <li>Cria <code>release/vX.Y.Z</code> a partir de <code>production</code></li>
-        <li>Reseta <code>staging</code> e abre os PRs para <code>production</code> e <code>main</code></li>
+        <li>Reseta <code>staging</code> e abre o PR da release para <code>production</code></li>
         <li>Cria a tag anotada <code>vX.Y.Z</code></li>
-        <li>Agente só com <code>/conventions release on</code>, um passo por vez</li>
+        <li>A cada N releases, abre o PR <code>production → main</code></li>
+        <li>Agente autorizado por padrão; <code>/conventions release off</code> revoga</li>
       </ul>
     </div>
     <div class="panel">
@@ -300,7 +309,7 @@ th { color: var(--muted); font-weight: 600; }
       <ul>
         <li><code>pr-checks</code>, <code>ci</code>, <code>security</code> nos PRs</li>
         <li><code>staging.yml</code> no push de <code>staging</code></li>
-        <li><code>release.yml</code> no push da tag: valida, testa, empacota, atesta, publica e faz deploy</li>
+        <li><code>release.yml</code> no push da tag: valida, testa, empacota, atesta, publica, faz deploy e avisa quando é hora do backup em <code>main</code></li>
         <li>Nunca cria branches nem tags</li>
       </ul>
     </div>
@@ -410,19 +419,31 @@ gh run watch</pre>
     </article>
 
     <article class="panel step" data-step="7">
-      <header><span class="num">7</span><h3>Limpeza pós-publicação</h3></header>
+      <header><span class="num">7</span><h3>Reset de staging</h3><span class="optional">opcional</span></header>
       <div class="label">Mantenedor executa</div>
       <pre>git fetch origin
-git push --force-with-lease origin origin/production:staging
-gh pr create --base main --head staging \
-  --title "chore(release): sincroniza main com $VERSION"
-gh pr checks staging --watch
-gh pr merge staging --merge</pre>
+git push --force-with-lease origin origin/production:staging</pre>
       <div class="label">Conferir</div>
       <ul class="checks">
         <li><label><input type="checkbox" data-check="7a"><span><code>staging</code> idêntica a <code>production</code></span></label></li>
-        <li><label><input type="checkbox" data-check="7b"><span><code>main</code> sincronizada (check <code>main-sync</code> verde)</span></label></li>
-        <li><label><input type="checkbox" data-check="7c"><span>Features em teste que não entraram foram mergeadas de novo em <code>staging</code></span></label></li>
+        <li><label><input type="checkbox" data-check="7b"><span>Features em teste que não entraram foram mergeadas de novo em <code>staging</code></span></label></li>
+      </ul>
+    </article>
+
+    <article class="panel step" data-step="8">
+      <header><span class="num">8</span><h3>Backup estável em main</h3></header>
+      <div class="label">A cada N releases (padrão 2)</div>
+      <pre>git fetch origin --tags
+git tag -l 'v[0-9]*' --merged origin/production --no-merged origin/main
+gh pr create --base main --head production \
+  --title "chore(release): backup estável $VERSION"
+gh pr checks production --watch
+gh pr merge production --merge</pre>
+      <p>Único caminho até <code>main</code>. Intervalo em <code>.claude/conventions.json</code> (<code>/conventions main-sync &lt;n&gt;</code>); o <code>release.yml</code> avisa quando chega a vez.</p>
+      <div class="label">Conferir</div>
+      <ul class="checks">
+        <li><label><input type="checkbox" data-check="8a"><span>HEAD de <code>production</code> tem tag <code>vX.Y.Z</code> (check <code>main-sync</code> verde)</span></label></li>
+        <li><label><input type="checkbox" data-check="8b"><span>Merge por <strong>merge commit</strong></span></label></li>
       </ul>
     </article>
   </div>
@@ -431,7 +452,7 @@ gh pr merge staging --merge</pre>
   <h2>Fluxo de hotfix</h2>
   <p class="lead">Correção urgente vai direto para <code>production</code> por PR, sem release e sem passar por <code>staging</code> antes.</p>
   <div class="panel diagram">
-    <svg viewBox="0 0 1000 320" role="img" aria-label="Diagrama do hotfix: hotfix nasce de production, PR squash para production com tag de patch, cherry-pick em staging e sincronização de main">
+    <svg viewBox="0 0 1000 320" role="img" aria-label="Diagrama do hotfix: hotfix nasce de production, PR squash para production com tag de patch e cherry-pick em staging; conta para o intervalo do backup em main">
       <rect class="lane-bg" x="0" y="20" width="1000" height="40" rx="6"/>
       <rect class="lane-bg" x="0" y="90" width="1000" height="40" rx="6"/>
       <rect class="lane-bg" x="0" y="160" width="1000" height="40" rx="6"/>
@@ -460,15 +481,11 @@ gh pr merge staging --merge</pre>
       <circle class="commit stg" cx="470" cy="110" r="7"/>
       <text class="small" x="482" y="124">cherry-pick</text>
 
-      <path class="line main" d="M600 260C640 260 640 40 680 40"/>
-      <circle class="commit main" cx="688" cy="40" r="9"/>
-      <circle class="commit main" cx="688" cy="40" r="4"/>
-      <text class="small" x="700" y="66">PR production → main</text>
+      <text class="small" x="600" y="66">main só recebe o backup quando o intervalo de N releases fecha</text>
 
       <g class="marker"><circle cx="280" cy="152" r="11"/><text x="280" y="156" text-anchor="middle">1</text></g>
       <g class="marker"><circle cx="390" cy="226" r="11"/><text x="390" y="230" text-anchor="middle">2</text></g>
       <g class="marker"><circle cx="456" cy="170" r="11"/><text x="456" y="174" text-anchor="middle">3</text></g>
-      <g class="marker"><circle cx="660" cy="150" r="11"/><text x="660" y="154" text-anchor="middle">4</text></g>
     </svg>
   </div>
   <div class="steps" style="margin-top: 12px">
@@ -494,11 +511,7 @@ git push origin "$VERSION"</pre>
       <pre>git switch staging &amp;&amp; git reset --hard origin/staging
 git cherry-pick origin/production
 git push origin staging</pre>
-      <div class="label">4 · Sincronizar main</div>
-      <pre>gh pr create --base main --head production \
-  --title "chore(release): sincroniza main com $VERSION"
-gh pr merge production --merge</pre>
-      <p>Se houver release aberta, leve o fix para ela com <code>bugfix/*</code> a partir de <code>production</code> e PR squash.</p>
+      <p>O hotfix conta como release para o intervalo do backup em <code>main</code> (passo 8). Se houver release aberta, leve o fix para ela com <code>bugfix/*</code> a partir de <code>production</code> e PR squash.</p>
     </div>
   </div>
 
@@ -508,13 +521,13 @@ gh pr merge production --merge</pre>
       <thead><tr><th>Proteção</th><th>Regra</th><th>Impede</th></tr></thead>
       <tbody>
         <tr><td>Ruleset <code>production</code></td><td>Só PR, checks, aprovações, commits assinados, sem bypass</td><td>Push direto e publicação sem revisão</td></tr>
-        <tr><td><code>pr-checks</code></td><td>Rotas: release/hotfix → production; feature → release/staging; staging/production → main</td><td><code>staging</code> virar origem de produção</td></tr>
+        <tr><td><code>pr-checks</code></td><td>Rotas: release/hotfix → production; feature → release/staging; só production → main</td><td><code>staging</code> virar origem de produção ou de <code>main</code></td></tr>
         <tr><td>Ruleset <code>release/v*</code></td><td>Criação só pelo mantenedor; PR com squash</td><td>Release fora de controle e commits soltos</td></tr>
         <tr><td>Ruleset <code>staging</code></td><td>Force push só pelo mantenedor</td><td>Reset acidental da homologação</td></tr>
-        <tr><td>Ruleset <code>main</code> + <code>main-sync</code></td><td>Só PR com conteúdo idêntico a <code>production</code></td><td>Backup com código não publicado</td></tr>
+        <tr><td>Ruleset <code>main</code> + <code>main-sync</code></td><td>Só PR de <code>production</code> com HEAD tagueado</td><td>Backup com código não publicado</td></tr>
         <tr><td>Ruleset tags <code>v*</code></td><td>Criação só pelo mantenedor; ninguém move ou apaga</td><td>Mover ou apagar versão publicada</td></tr>
         <tr><td><code>release.yml</code></td><td>Tag anotada, em <code>production</code>, maior que a anterior</td><td>Publicar commit fora de produção ou versão repetida</td></tr>
-        <tr><td>Guard do plugin</td><td>Bloqueia puxar <code>staging</code>/<code>main</code>; passos de release só com <code>/conventions release on</code></td><td>Erros do agente antes de chegarem ao GitHub</td></tr>
+        <tr><td>Guard do plugin</td><td>Bloqueia puxar <code>staging</code>/<code>main</code> e PR para <code>main</code> fora de <code>production</code>; passos de release respeitam <code>releaseAgent</code></td><td>Erros do agente antes de chegarem ao GitHub</td></tr>
       </tbody>
     </table>
   </div>

@@ -42,7 +42,7 @@ sequenceDiagram
     Mant->>prod: PR release/v1.4.0 (merge commit)
     Mant->>prod: tag v1.4.0 → release.yml → produção
     Mant->>stg: reset para production
-    Mant->>main: PR de sincronização staging → main
+    Mant->>main: PR production → main (a cada N releases)
 ```
 
 Comandos completos em [05-automacao.md](05-automacao.md#uso-diario).
@@ -85,7 +85,7 @@ Comandos completos em [05-automacao.md](05-automacao.md#uso-diario).
 ### 7. Limpeza pós-publicação
 
 - `staging` é resetada para `production` (`git push --force-with-lease origin origin/production:staging`): toda a contaminação acumulada some e o próximo ciclo começa igual à produção. Features em teste que não entraram são mergeadas de novo em `staging` por quem as desenvolve.
-- PR de sincronização `staging → main` (ou `production → main` sem homologação), com merge commit. O `pr-checks.yml` confere que o conteúdo é idêntico a `production`.
+- A cada **N releases publicadas** (padrão 2), PR `production → main` com merge commit. É o único caminho até `main`, e o `pr-checks.yml` só aceita quando o HEAD de `production` tem tag `vX.Y.Z`. O `release.yml` avisa (job `main-sync-reminder`) quando o intervalo é atingido.
 
 ## Fluxo de hotfix
 
@@ -96,7 +96,7 @@ Correção urgente não passa pela release nem por `staging` antes de produção
 3. Após o merge, tag de patch `vX.Y.(Z+1)` → `release.yml` → produção.
 4. Leve o fix para `staging` por `git cherry-pick <commit-do-squash>` (se houver homologação).
 5. Se houver uma `release/*` aberta, leve o fix para ela também: `bugfix/*` a partir de `production` (que já contém o hotfix) com PR squash para a release.
-6. Sincronize `main` como no passo 7 do fluxo regular.
+6. O hotfix conta como release publicada para o intervalo do backup em `main` (passo 7 do fluxo regular).
 
 ## Pacotes
 

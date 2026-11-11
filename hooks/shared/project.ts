@@ -2,12 +2,15 @@ import type { EngineInterface } from 'claude-code'
 
 export const MARKER_PATH = '.claude/conventions.json'
 
-export type Marker = { enabled: string[]; releaseAgent?: boolean }
+export const DEFAULT_MAIN_SYNC_EVERY = 2
+
+export type Marker = { enabled: string[]; releaseAgent?: boolean; mainSyncEvery?: number }
 
 export type ProjectState = {
   root: string
   enabled: ReadonlySet<string>
   releaseAgent: boolean
+  mainSyncEvery: number
   blockedBy: string | undefined
 }
 
@@ -23,8 +26,12 @@ export async function readMarker($: EngineInterface, root: string): Promise<Mark
   if (typeof text !== 'string') return { enabled: [] }
   try {
     const parsed = JSON.parse(text) as Partial<Marker>
-    const enabled = Array.isArray(parsed.enabled) ? parsed.enabled.filter(m => typeof m === 'string') : []
-    return parsed.releaseAgent === true ? { enabled, releaseAgent: true } : { enabled }
+    const marker: Marker = {
+      enabled: Array.isArray(parsed.enabled) ? parsed.enabled.filter(m => typeof m === 'string') : [],
+    }
+    if (typeof parsed.releaseAgent === 'boolean') marker.releaseAgent = parsed.releaseAgent
+    if (Number.isInteger(parsed.mainSyncEvery) && parsed.mainSyncEvery! > 0) marker.mainSyncEvery = parsed.mainSyncEvery
+    return marker
   } catch {
     return { enabled: [] }
   }
@@ -53,7 +60,13 @@ export async function blockedPattern(
 export async function projectState($: EngineInterface, patterns: readonly string[]): Promise<ProjectState> {
   const root = await projectRoot($)
   const blockedBy = await blockedPattern($, root, patterns)
-  if (blockedBy) return { root, enabled: new Set(), releaseAgent: false, blockedBy }
+  if (blockedBy) return { root, enabled: new Set(), releaseAgent: false, mainSyncEvery: DEFAULT_MAIN_SYNC_EVERY, blockedBy }
   const marker = await readMarker($, root)
-  return { root, enabled: new Set(marker.enabled), releaseAgent: marker.releaseAgent === true, blockedBy }
+  return {
+    root,
+    enabled: new Set(marker.enabled),
+    releaseAgent: marker.releaseAgent ?? true,
+    mainSyncEvery: marker.mainSyncEvery ?? DEFAULT_MAIN_SYNC_EVERY,
+    blockedBy,
+  }
 }

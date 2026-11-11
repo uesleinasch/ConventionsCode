@@ -113,3 +113,29 @@ jobs:
           name: package
           path: dist/
       - run: ./scripts/deploy.sh production dist/
+
+  main-sync-reminder:
+    needs: deploy-production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verificar intervalo do backup em main
+        env:
+          EVERY: ${{ vars.MAIN_SYNC_EVERY }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          every="$EVERY"
+          if [ -z "$every" ] && [ -f .claude/conventions.json ]; then
+            every=$(jq -r '.mainSyncEvery // empty' .claude/conventions.json)
+          fi
+          every="${every:-2}"
+
+          pending=$(git tag -l 'v[0-9]*' --merged origin/production --no-merged origin/main | grep -cE '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          echo "### $pending release(s) publicadas desde o último backup em main (intervalo: $every)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$pending" -ge "$every" ]; then
+            echo "::notice::Abra o PR production → main: gh pr create --base main --head production --title \"chore(release): backup estável $TAG\""
+          fi

@@ -6,7 +6,8 @@ Nomenclatura baseada em [Conventional Branch](https://conventionalbranch.org/pt-
 
 ### `production`
 
-- Branch **default** do repositório e **origem de todo o trabalho**: features, correções, hotfixes e releases nascem dela.
+- Branch **principal** e **origem de todo o trabalho**: features, correções, hotfixes e releases nascem dela.
+- Não precisa ser a branch default do repositório. Como o `gh pr create` usa a default quando `--base` é omitido, informe sempre `--base`.
 - Representa **exatamente** o que está em produção. Cada publicação recebe uma tag `vX.Y.Z` no seu HEAD.
 - Recebe somente por PR:
   - `release/vX.Y.Z` → **merge commit** (publicação regular);
@@ -24,8 +25,9 @@ Nomenclatura baseada em [Conventional Branch](https://conventionalbranch.org/pt-
 
 ### `main`
 
-- **Backup estável**: cópia de `production`, mantida para quem precisa de uma referência que nunca tem código não publicado.
-- Recebe só o PR de sincronização depois de cada publicação: `staging → main` (com `staging` já resetada para `production`) ou `production → main` em projetos sem homologação.
+- **Backup estável e seguro**: só contém versões publicadas e já validadas em produção.
+- Recebe **somente** PR de `production`, e só quando o HEAD de `production` tem tag `vX.Y.Z` (validado pelo `pr-checks.yml`). Nenhum outro caminho: nem `staging`, nem release, nem hotfix direto.
+- O PR é aberto a cada **N releases publicadas** (padrão 2, configurável com `/conventions main-sync <n>`).
 - Nunca é origem de branch nem de sincronização.
 
 ## Branches temporárias
@@ -76,7 +78,7 @@ release:                      ^release/v[0-9]+\.[0-9]+\.[0-9]+$
 | `production`       | `release/vX.Y.Z`, `hotfix/*`, `dependabot/*`            |
 | `release/vX.Y.Z`   | `feature/*`, `bugfix/*`, `chore/*`                      |
 | `staging`          | `feature/*`, `bugfix/*`, `chore/*` (PR opcional; merge direto também vale) |
-| `main`             | `staging` ou `production`, com conteúdo idêntico a `production` |
+| `main`             | **somente** `production`, com HEAD tagueado `vX.Y.Z`     |
 
 Validado pelo workflow [`pr-checks.yml`](https://github.com/uesleinasch/ConventionsCode/blob/main/GitFlow/templates/.github/workflows/pr-checks.yml).
 
