@@ -39,7 +39,7 @@ Sem homologação, apague `staging.yml` e o Environment `staging`.
 1. **Ferramentas locais**
    - [ ] `gh` autenticado (`gh auth status`); o mantenedor com papel Admin ou Maintain.
    - [ ] [`git-cliff`](https://git-cliff.org/docs/installation) instalado (conferência do bump).
-   - [ ] Assinatura de commits e tags configurada ([04-seguranca.md](04-seguranca.md#assinatura)).
+   - [ ] Opcional: assinatura local de commits e tags. Não é necessária no fluxo por PR, porque o GitHub assina os merges ([04-seguranca.md](04-seguranca.md#assinatura)).
 2. **Branches**
    - [ ] `production` a partir do commit que está no ar, com tag `vX.Y.Z` (ou `v0.1.0`). A branch default do repositório pode continuar a mesma.
    - [ ] `main` e, se houver homologação, `staging` criadas a partir de `production`.
