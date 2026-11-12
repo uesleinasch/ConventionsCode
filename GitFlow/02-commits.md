@@ -61,7 +61,7 @@ Refs: 3f2a9c1
 
 ## Onde a convenção é aplicada
 
-Como os PRs de trabalho são mergeados com **squash**, o commit que fica em `main` é o **título do PR**. Por isso:
+Como os PRs de trabalho para a release (e os hotfixes para `production`) são mergeados com **squash**, o commit que fica é o **título do PR**. Por isso:
 
 1. **Título do PR** — validado no CI (`pr-checks.yml`) e é a fonte da verdade para versão e changelog.
 2. **Commits locais** — recomendado seguir a convenção também (hook `commit-msg` com commitlint ou validação pelo Claude Code), mas não bloqueia o merge.
@@ -71,5 +71,5 @@ Configuração do repositório: *Settings → General → Pull Requests → Allo
 
 ## Commits que não entram no changelog
 
-- Merge commits de back-merge (`Merge pull request #N ...`) — não convencionais, filtrados.
+- Merge commits da release e do backup em `main` (`Merge pull request #N ...`) — não convencionais, filtrados.
 - `chore(release): ...` — gerados pelo processo de release.

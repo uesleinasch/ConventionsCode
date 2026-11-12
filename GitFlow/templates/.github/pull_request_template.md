@@ -1,6 +1,6 @@
 ## O que muda
 
-<!-- Resumo objetivo. O título do PR vira o commit em main: use Conventional Commits, ex.: feat(auth): adiciona login com SSO -->
+<!-- Resumo objetivo. Em PR para release/* ou de hotfix, o título vira o commit (squash): use Conventional Commits, ex.: feat(auth): adiciona login com SSO -->
 
 ## Por que
 

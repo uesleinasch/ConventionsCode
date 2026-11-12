@@ -14,6 +14,13 @@ export const COMMIT_TYPES = [
 
 export const HEADER_MAX_LENGTH = 100
 
+export const PRODUCTION = 'production'
+export const BACKUP = 'main'
+export const STAGING = 'staging'
+
+export const RELEASE_LOCKED =
+  'é um passo de release do mantenedor. Autorize o agente neste projeto com /conventions release on, ou execute você mesmo.'
+
 const HEADER = new RegExp(
   `^(${COMMIT_TYPES.join('|')})(\\([a-z0-9][a-z0-9._/-]*\\))?!?: [a-z](.*[^.\\s])?$`,
 )
@@ -21,13 +28,37 @@ const HEADER = new RegExp(
 const WORK_BRANCH = /^(feature|bugfix|hotfix|chore)\/[a-z0-9]+(-[a-z0-9]+)*$/
 const RELEASE_BRANCH = /^release\/v[0-9]+\.[0-9]+\.[0-9]+$/
 const VERSION_TAG = /^v[0-9]/
+const RELEASE_TAG = /^v[0-9]+\.[0-9]+\.[0-9]+$/
+
+export function branchName(ref: string): string {
+  return ref.replace(/^refs\/heads\//, '').replace(/^refs\/remotes\/[^/]+\//, '').replace(/^origin\//, '')
+}
 
 export function isProtectedBranch(branch: string): boolean {
-  return branch === 'main' || branch === 'production' || branch.startsWith('release/')
+  return branch === PRODUCTION || branch === BACKUP || branch.startsWith('release/')
+}
+
+export function isReleaseBranch(branch: string): boolean {
+  return RELEASE_BRANCH.test(branch)
+}
+
+export function isKnownBranch(branch: string): boolean {
+  return (
+    branch === PRODUCTION ||
+    branch === BACKUP ||
+    branch === STAGING ||
+    branch.startsWith('release/') ||
+    WORK_BRANCH.test(branch)
+  )
 }
 
 export function isVersionTag(name: string): boolean {
   return VERSION_TAG.test(name.replace(/^refs\/tags\//, ''))
+}
+
+export function checkVersionTagName(name: string): string | undefined {
+  const tag = name.replace(/^refs\/tags\//, '')
+  return RELEASE_TAG.test(tag) ? undefined : `tag de versão "${tag}" fora do padrão; use vX.Y.Z.`
 }
 
 export function checkCommitHeader(message: string): string | undefined {
@@ -45,12 +76,16 @@ export function checkCommitHeader(message: string): string | undefined {
   return undefined
 }
 
-export function checkNewBranch(name: string): string | undefined {
-  if (name.startsWith('release/')) {
-    return `branches release/* são criadas apenas pelo workflow cut-release (bot de release).`
-  }
-  if (name === 'main' || name === 'production') {
+export function checkNewBranch(name: string, start: string | undefined): string | undefined {
+  const origin = start === undefined ? undefined : branchName(start)
+  const fromOther = origin !== undefined && isKnownBranch(origin) && origin !== PRODUCTION
+
+  if (name === PRODUCTION || name === BACKUP || name === STAGING) {
     return `${name} é uma branch permanente.`
+  }
+  if (name.startsWith('release/')) {
+    if (!RELEASE_BRANCH.test(name)) return `"${name}" fora do padrão; branches de release usam release/vX.Y.Z.`
+    return fromOther ? `${name} deve nascer de ${PRODUCTION}, não de ${origin}.` : undefined
   }
   if (!WORK_BRANCH.test(name)) {
     return (
@@ -58,24 +93,43 @@ export function checkNewBranch(name: string): string | undefined {
       `Use feature/, bugfix/, hotfix/ ou chore/ + descrição em minúsculas com hífens (ex.: feature/issue-42-export-csv).`
     )
   }
+  if (origin === STAGING) return `${STAGING} é destino, nunca origem: crie ${name} a partir de ${PRODUCTION}.`
+  if (fromOther && origin !== undefined && !RELEASE_BRANCH.test(origin)) return `${name} deve nascer de ${PRODUCTION}, não de ${origin}.`
   return undefined
 }
 
+export function checkSyncSource(ref: string): string | undefined {
+  const source = branchName(ref)
+  if (source === STAGING) {
+    return `${STAGING} é destino, nunca origem: sincronize com git rebase origin/${PRODUCTION}.`
+  }
+  if (source === BACKUP) {
+    return `${BACKUP} é só backup: sincronize com git rebase origin/${PRODUCTION}.`
+  }
+  return undefined
+}
+
+const WORK = /^(feature|bugfix|chore)\//
+
 export function checkPullRequestRoute(head: string, base: string): string | undefined {
-  const isBot = head.startsWith('dependabot/')
-  if (base === 'main') {
+  const isWork = WORK.test(head) && WORK_BRANCH.test(head)
+  if (base === PRODUCTION) {
     const ok =
-      (/^(feature|bugfix|chore)\//.test(head) && WORK_BRANCH.test(head)) ||
       RELEASE_BRANCH.test(head) ||
-      isBot
-    return ok ? undefined : `PR de "${head}" para main não é permitido (aceita feature/*, bugfix/*, chore/* e back-merge release/v*).`
+      (head.startsWith('hotfix/') && WORK_BRANCH.test(head)) ||
+      head.startsWith('dependabot/')
+    return ok ? undefined : `PR de "${head}" para ${PRODUCTION} não é permitido (aceita release/vX.Y.Z, hotfix/* e dependabot/*).`
   }
   if (RELEASE_BRANCH.test(base)) {
-    const ok = /^(bugfix|hotfix|chore)\//.test(head) && WORK_BRANCH.test(head)
-    return ok ? undefined : `PR de "${head}" para ${base} não é permitido (aceita bugfix/*, hotfix/*, chore/*).`
+    return isWork ? undefined : `PR de "${head}" para ${base} não é permitido (aceita feature/*, bugfix/*, chore/*).`
   }
-  if (base === 'production') {
-    return `production não recebe PR; é atualizada só pelo workflow promote.`
+  if (base === BACKUP) {
+    return head === PRODUCTION
+      ? undefined
+      : `${BACKUP} é o backup estável: só recebe PR de ${PRODUCTION}. Para trabalho, use --base release/vX.Y.Z, --base ${STAGING} ou --base ${PRODUCTION} (hotfix).`
   }
-  return `PRs para "${base}" não são permitidos (destinos: main ou release/vX.Y.Z).`
+  if (base === STAGING) {
+    return isWork ? undefined : `PR de "${head}" para ${STAGING} não é permitido (aceita feature/*, bugfix/*, chore/*).`
+  }
+  return `PRs para "${base}" não são permitidos (destinos: ${PRODUCTION}, release/vX.Y.Z, ${STAGING} ou ${BACKUP}).`
 }

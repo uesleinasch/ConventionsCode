@@ -59,7 +59,7 @@ test('enable cria o marcador e passa a bloquear; disable libera', async ($, on) 
   const enabled = await $.command.run(run('enable gitflow'))
   expect(enabled.text).toMatch(/ativada/)
   expect(enabled.context?.[0]).toMatch(/REGRAS/)
-  expect(JSON.parse(fake.files.get(MARKER)!)).toEqual({ enabled: ['gitflow'] })
+  expect(JSON.parse(fake.files.get(MARKER)!)).toEqual({ enabled: ['gitflow'], releaseAgent: true, mainSyncEvery: 2 })
 
   const blocked = await $.tool.call(BAD_COMMIT)
   expect(blocked.deny ?? blocked.text).toMatch(/conventions-code\/gitflow/)
@@ -106,4 +106,36 @@ test('clean-code injeta regras próprias, não bloqueia Bash e exige stack no se
 
   const again = await $.command.run(run('setup clean-code python'))
   expect(again.text).toMatch(/= ruff\.toml \(já existia/)
+})
+
+test('release vem autorizado por padrão; off/on e main-sync ficam gravados', async ($, on) => {
+  const fake: Fake = { files: new Map(), branch: 'production', remotes: '' }
+  fakeHost(on, fake)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  const TAG = { tool: 'Bash', command: 'git tag -a v1.0.0 -m "Release v1.0.0"' } as const
+
+  const notEnabled = await $.command.run(run('release on'))
+  expect(notEnabled.text).toMatch(/enable gitflow/)
+
+  await $.command.run(run('enable gitflow'))
+  const byDefault = await $.tool.call(TAG)
+  expect(byDefault.deny).toBeUndefined()
+
+  await $.command.run(run('release off'))
+  expect(JSON.parse(fake.files.get(MARKER)!)).toEqual({ enabled: ['gitflow'], releaseAgent: false, mainSyncEvery: 2 })
+  const locked = await $.tool.call(TAG)
+  expect(locked.deny ?? locked.text).toMatch(/release on/)
+
+  await $.command.run(run('release on'))
+  const freed = await $.tool.call(TAG)
+  expect(freed.deny).toBeUndefined()
+
+  const every = await $.command.run(run('main-sync 3'))
+  expect(every.text).toMatch(/a cada 3/)
+  expect(JSON.parse(fake.files.get(MARKER)!)).toEqual({ enabled: ['gitflow'], releaseAgent: true, mainSyncEvery: 3 })
+  const invalid = await $.command.run(run('main-sync 0'))
+  expect(invalid.text).toMatch(/n ≥ 1/)
+
+  await $.command.run(run('disable gitflow'))
+  expect(JSON.parse(fake.files.get(MARKER)!)).toEqual({ enabled: [] })
 })
