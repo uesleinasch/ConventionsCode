@@ -89,7 +89,9 @@ Secrets de produção ficam **apenas** no Environment `production` — nunca em 
 
 ## Assinatura
 
-- **Commits**: obrigatórios assinados em `production`, `main` e `release/*` (SSH ou GPG). Squash/merge feitos pela UI do GitHub já saem assinados.
+- **Commits**: o ruleset exige assinatura em `production` e `release/*`, mas quem cria esses commits é o GitHub. Squash e merge de PR (pela UI ou por `gh pr merge`) saem assinados pela chave do GitHub, então **assinar localmente não é necessário**: os commits das branches de trabalho podem ir sem assinatura.
+- Autenticação SSH (`gh auth login`, `git push` por SSH) não é assinatura: ela prova quem enviou, não quem escreveu o commit. O autor de um commit é só o `user.email` local, que qualquer um pode preencher.
+- A assinatura local só é necessária quando o mantenedor envia commits direto para uma branch protegida usando o bypass (ex.: `git revert` direto na release). Para isso, ou para quem quiser o selo *Verified* também nos commits de trabalho, opcionalmente:
   ```bash
   git config --global gpg.format ssh
   git config --global user.signingkey ~/.ssh/id_ed25519.pub

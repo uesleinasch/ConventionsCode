@@ -1,5 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 
+import { bootstrapBranches, type GitRun } from './gitflow/bootstrap'
 import { checkCommand } from './gitflow/guard'
 import {
   DEFAULT_MAIN_SYNC_EVERY,
@@ -57,7 +58,9 @@ const USAGE = [
   '  enable <convenção>  ativa a convenção SOMENTE neste projeto',
   '  disable <convenção> desativa a convenção neste projeto',
   '  setup <convenção> [stack]  copia os templates para o projeto (não sobrescreve)',
+  '  setup gitflow [ref]  também cria as branches permanentes que faltam; sem production em origin, informe a ref que está no ar',
   '  release on|off      autoriza (padrão) ou não o agente a executar os passos de release do gitflow',
+  '  auto on|off         autonomia total no gitflow: inclui release e merge de PRs, conduzindo o fluxo de ponta a ponta (padrão off)',
   '  main-sync <n>       abre o PR production → main a cada n releases (padrão 2)',
   '',
   ...CONVENTIONS.map(c =>
@@ -74,6 +77,9 @@ const releaseNote = (state: ProjectState) =>
     state.releaseAgent
       ? 'Autorização de release: ATIVA neste projeto. Quando o usuário pedir uma release ou hotfix, execute os passos de "Uso diário" de GitFlow/05-automacao.md de ponta a ponta, conferindo cada workflow (gh run watch / gh pr checks --watch) antes do próximo passo e parando no primeiro erro.'
       : 'Autorização de release: INATIVA neste projeto. Para passos de release (release/*, tags v*, PRs para production/main, reset de staging) mostre os comandos ao usuário; ele pode autorizar com /conventions release on.',
+    state.autonomy
+      ? 'Autonomia: ATIVA neste projeto. Conduza o fluxo pedido de ponta a ponta sem pedir confirmação entre os passos: abra o PR, espere os checks (gh pr checks --watch) e faça o merge você mesmo (gh pr merge com --squash ou --merge conforme a rota, nunca --admin); siga para tag, deploy e backup quando couber. Pare e reporte no primeiro check vermelho, conflito ou erro; não contorne proteções.'
+      : 'Autonomia: INATIVA neste projeto. Não faça merge de PR (gh pr merge): avise que o PR está pronto e mostre o comando; o usuário pode autorizar com /conventions auto on.',
     `Backup em main: a cada ${state.mainSyncEvery} release(s) publicada(s) abra o PR production → main (conte com git tag -l 'v*' --merged origin/production --no-merged origin/main).`,
   ].join('\n')
 
@@ -97,6 +103,7 @@ async function guardBash($: EngineInterface, id: string, command: string, state:
     return checkCommand(command, {
       currentBranch: () => currentBranch($, state.root),
       releaseAuthorized: state.releaseAgent,
+      autonomy: state.autonomy,
     })
   }
   return undefined
@@ -114,7 +121,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: COMMAND,
       description: 'Ativa/desativa convenções (GitFlow etc.) apenas neste projeto',
-      argumentHint: '[status|enable|disable|setup|release] [convenção|on|off]',
+      argumentHint: '[status|enable|disable|setup|release|auto|main-sync] [convenção|on|off]',
     })
     const state = await projectState($, blockedPatterns).catch(() => undefined)
     if (state) statusLine($, state)
@@ -165,6 +172,7 @@ export const register: Register = (on, options) => {
           ? `Bloqueado: o remote/caminho casa com "${state.blockedBy}" (blockedRemotes). Nenhuma convenção é aplicada aqui.`
           : `Ativas: ${active.length > 0 ? active.map(c => c.id).join(', ') : 'nenhuma'} (${MARKER_PATH})`,
         `Autorização de release do gitflow: ${state.releaseAgent ? 'ativa' : 'inativa'}`,
+        `Autonomia (merge de PRs, fluxo de ponta a ponta): ${state.autonomy ? 'ativa' : 'inativa'}`,
         `PR production → main: a cada ${state.mainSyncEvery} release(s)`,
         '',
         USAGE,
@@ -180,12 +188,31 @@ export const register: Register = (on, options) => {
       }
       const marker = await readMarker($, state.root)
       const authorized = id === 'on'
-      await writeMarker($, state.root, { ...marker, releaseAgent: authorized })
-      const next = { ...state, releaseAgent: authorized }
+      const { autonomy: _revoked, ...withoutAutonomy } = marker
+      await writeMarker($, state.root, authorized ? { ...marker, releaseAgent: true } : { ...withoutAutonomy, releaseAgent: false })
+      const next = { ...state, releaseAgent: authorized, autonomy: authorized && state.autonomy }
       return {
         text: authorized
           ? `Agente autorizado a executar os passos de release do gitflow em ${state.root}.`
           : `Autorização de release revogada em ${state.root}.`,
+        context: [releaseNote(next)],
+      }
+    }
+
+    if (action === 'auto') {
+      if (state.blockedBy) return { text: `Recusado: este projeto casa com o padrão bloqueado "${state.blockedBy}".` }
+      if (!state.enabled.has('gitflow')) return { text: `Ative antes: /${COMMAND} enable gitflow` }
+      if (id !== 'on' && id !== 'off') {
+        return { text: `Autonomia: ${state.autonomy ? 'ativa' : 'inativa'}. Use /${COMMAND} auto on|off.` }
+      }
+      const marker = await readMarker($, state.root)
+      const autonomy = id === 'on'
+      await writeMarker($, state.root, autonomy ? { ...marker, releaseAgent: true, autonomy } : { ...marker, autonomy })
+      const next = { ...state, releaseAgent: autonomy || state.releaseAgent, autonomy }
+      return {
+        text: autonomy
+          ? `Autonomia ativada em ${state.root}: o agente conduz release e merge de PRs sozinho. As regras do hook continuam valendo.`
+          : `Autonomia desativada em ${state.root}. Merges de PR voltam a ser seus.`,
         context: [releaseNote(next)],
       }
     }
@@ -262,6 +289,10 @@ export const register: Register = (on, options) => {
         ...report.created.map(f => `  + ${f}`),
         ...report.skipped.map(f => `  = ${f} (já existia, não alterado)`),
       ]
+      if (convention.id === 'gitflow') {
+        const git: GitRun = args => $.process.run(['git', ...args], { cwd: state.root })
+        lines.push('', 'Branches permanentes:', ...(await bootstrapBranches(git, variant)))
+      }
       return {
         text: lines.join('\n'),
         context: [
