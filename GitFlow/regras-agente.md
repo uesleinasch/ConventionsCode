@@ -16,8 +16,10 @@ Regras obrigatórias de Git neste projeto. Documentação completa no diretório
 
 ## Releases e tags
 - Tags `vX.Y.Z` sempre anotadas (`git tag -a`), criadas no HEAD de `origin/production` depois do merge da release ou do hotfix, e enviadas pelo nome (`git push origin vX.Y.Z`). Nunca mover nem apagar tags `v*`.
+- Branches permanentes (`production`, `main`, `staging`) nunca são criadas pelo agente. Se faltar a cópia local, use `git switch <branch>` (acompanha `origin/<branch>`). Se faltar em `origin`, peça ao usuário para rodar `/conventions setup gitflow <ref>`.
 - Passos do mantenedor (criar `release/*`, PR para `production` ou `main`, tag, reset de `staging`) seguem a seção "Uso diário" de `05-automacao.md`.
 - Autorização de release ativa (padrão): execute um passo por vez quando o usuário pedir, espere cada workflow/check (`gh run watch`, `gh pr checks --watch`) e pare no primeiro erro. Após cada publicação, confira o intervalo do backup e abra o PR `production → main` quando chegar a vez. Autorização inativa (`/conventions release off`): mostre os comandos ao usuário.
+- Merge de PR (`gh pr merge`) só com autonomia (`/conventions auto on`, que também liga a autorização de release). Com ela, conduza o fluxo de ponta a ponta sem pedir confirmação entre os passos, sempre esperando os checks antes do merge e parando no primeiro erro. Sem ela, avise que o PR está pronto e mostre o comando. Nunca use `gh pr merge --admin`.
 - Não existe bot nem GitHub App de release: nunca propor App, PAT, secrets de release ou workflows que criem refs.
 - Nunca usar `git push --force` sem lease. Reset de `staging` só com `--force-with-lease` e autorização. Nunca `--all`, `--mirror`, `--tags`.
 

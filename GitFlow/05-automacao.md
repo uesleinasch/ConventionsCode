@@ -43,6 +43,7 @@ Sem homologação, apague `staging.yml` e o Environment `staging`.
 2. **Branches**
    - [ ] `production` a partir do commit que está no ar, com tag `vX.Y.Z` (ou `v0.1.0`). A branch default do repositório pode continuar a mesma.
    - [ ] `main` e, se houver homologação, `staging` criadas a partir de `production`.
+   - [ ] Atalho: `/conventions setup gitflow <ref>` cria `production` em `origin` a partir de `<ref>` (só se ela ainda não existir), cria `main` a partir de `production` se faltar e as cópias locais. Sem `<ref>`, só relata e cria as cópias locais. `staging` e a tag inicial continuam manuais.
    - [ ] `dependabot.yml` com `target-branch: production` (já no template).
    - [ ] Squash com *Default to pull request title*; merge commit habilitado; rebase desabilitado.
    - [ ] *Automatically delete head branches* ligado (as permanentes ficam protegidas pelo ruleset de deleção).
@@ -55,6 +56,7 @@ Sem homologação, apague `staging.yml` e o Environment `staging`.
 6. **Code security** — secret scanning, push protection, Dependabot alerts.
 7. **Claude Code** (opcional)
    - [ ] `/conventions enable gitflow` — grava `releaseAgent: true` e `mainSyncEvery: 2` em `.claude/conventions.json`.
+   - [ ] Opcional: `/conventions auto on` dá autonomia ao agente (merge de PRs e fluxo de ponta a ponta, parando no primeiro erro). `/conventions auto off` ou `/conventions release off` revogam.
    - [ ] Ajustar o intervalo do backup com `/conventions main-sync <n>` (ou a variável de repositório `MAIN_SYNC_EVERY`, que tem prioridade no `release.yml`).
 8. **Teste de fumaça**
    - [ ] `feature/teste-fluxo` → merge em `staging` → deploy de homologação.
