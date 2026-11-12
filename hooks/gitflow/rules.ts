@@ -21,6 +21,9 @@ export const STAGING = 'staging'
 export const RELEASE_LOCKED =
   'é um passo de release do mantenedor. Autorize o agente neste projeto com /conventions release on, ou execute você mesmo.'
 
+export const AUTONOMY_LOCKED =
+  'exige autonomia do agente. Autorize neste projeto com /conventions auto on, ou execute você mesmo.'
+
 const HEADER = new RegExp(
   `^(${COMMIT_TYPES.join('|')})(\\([a-z0-9][a-z0-9._/-]*\\))?!?: [a-z](.*[^.\\s])?$`,
 )
@@ -76,12 +79,16 @@ export function checkCommitHeader(message: string): string | undefined {
   return undefined
 }
 
+const isRemoteMirror = (name: string, start: string): boolean =>
+  start.replace(/^refs\/remotes\//, '') === `origin/${name}`
+
 export function checkNewBranch(name: string, start: string | undefined): string | undefined {
   const origin = start === undefined ? undefined : branchName(start)
   const fromOther = origin !== undefined && isKnownBranch(origin) && origin !== PRODUCTION
 
   if (name === PRODUCTION || name === BACKUP || name === STAGING) {
-    return `${name} é uma branch permanente.`
+    if (start !== undefined && isRemoteMirror(name, start)) return undefined
+    return `${name} é uma branch permanente: só crie a cópia local a partir de origin/${name} (ex.: git switch ${name}); a criação inicial é feita por /conventions setup gitflow.`
   }
   if (name.startsWith('release/')) {
     if (!RELEASE_BRANCH.test(name)) return `"${name}" fora do padrão; branches de release usam release/vX.Y.Z.`

@@ -2,9 +2,10 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { checkCommand } from '../hooks/gitflow/guard'
 
-const on = (branch: string | undefined, releaseAuthorized = false) => ({
+const on = (branch: string | undefined, releaseAuthorized = false, autonomy = false) => ({
   currentBranch: async () => branch,
   releaseAuthorized,
+  autonomy,
 })
 
 const allowed = async (command: string, branch = 'feature/x', authorized = false) =>
@@ -44,6 +45,16 @@ describe('branches', () => {
     await denied('git switch -c release/v1.2.0', 'production', /\/conventions release on/)
     await authorized('git switch -c release/v1.2.0 origin/production', 'staging')
     await denied('git switch -c release/v1.2.0', 'staging', /production/, true)
+  })
+
+  test('permanentes só nascem localmente como cópia da remota', async () => {
+    await allowed('git branch --track production origin/production', 'main')
+    await allowed('git switch -c staging origin/staging', 'production')
+    await allowed('git checkout -b main refs/remotes/origin/main', 'production')
+    await denied('git branch production main', 'main', /permanente/)
+    await denied('git switch -c production', 'main', /permanente/)
+    await denied('git branch production origin/main', 'main', /permanente/)
+    await denied('git branch main upstream/main', 'production', /permanente/)
   })
 
   test('ignora operações que não criam branch', async () => {
@@ -203,6 +214,27 @@ describe('gh pr create', () => {
     await authorized('gh pr create --base main --head production --title "chore(release): backup estável v1.4.0"')
     await denied('gh pr create --base main --head production --title "chore(release): backup estável"', 'feature/x', /\/conventions release on/)
     await denied('gh pr create --base main --head staging --title "chore(release): backup"', 'feature/x', /só recebe PR de production/, true)
+  })
+})
+
+describe('gh pr merge', () => {
+  const autonomous = async (command: string) =>
+    expect(await checkCommand(command, on('feature/x', true, true))).toBeUndefined()
+
+  test('sem autonomia o merge de PR é do usuário', async () => {
+    await denied('gh pr merge feature/proj-123-export-csv --squash', 'feature/x', /\/conventions auto on/, true)
+    await denied('git fetch origin && gh pr merge 42 --merge', 'feature/x', /\/conventions auto on/)
+  })
+
+  test('com autonomia faz merge, mas nunca com --admin', async () => {
+    await autonomous('gh pr merge feature/proj-123-export-csv --squash')
+    await autonomous('gh pr merge "release/v1.4.0" --merge --delete-branch')
+    expect(await checkCommand('gh pr merge 42 --squash --admin', on('feature/x', true, true))).toMatch(/--admin/)
+  })
+
+  test('ignora outros subcomandos de PR', async () => {
+    await allowed('gh pr checks 42 --watch')
+    await allowed('gh pr view 42')
   })
 })
 

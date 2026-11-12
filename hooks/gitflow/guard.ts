@@ -1,5 +1,6 @@
 import { invocationOf, resolveMessage, splitSegments } from '../shared/shell'
 import {
+  AUTONOMY_LOCKED,
   BACKUP,
   PRODUCTION,
   RELEASE_LOCKED,
@@ -18,6 +19,7 @@ import {
 export type GitContext = {
   currentBranch: () => Promise<string | undefined>
   releaseAuthorized: boolean
+  autonomy: boolean
 }
 
 type Scan = {
@@ -245,6 +247,11 @@ async function checkPullRequestCreate(scan: Scan): Promise<string | undefined> {
   return undefined
 }
 
+function checkPullRequestMerge(args: readonly string[], ctx: GitContext): string | undefined {
+  if (args.includes('--admin')) return `gh pr merge --admin ignora a proteção da branch e não é permitido.`
+  return ctx.autonomy ? undefined : `merge de PR ${AUTONOMY_LOCKED}`
+}
+
 export async function checkCommand(command: string, ctx: GitContext): Promise<string | undefined> {
   let branchOverride: string | undefined
 
@@ -257,6 +264,10 @@ export async function checkCommand(command: string, ctx: GitContext): Promise<st
     if (call.program === 'gh') {
       if (sub === 'pr' && args[0] === 'create') {
         const issue = await checkPullRequestCreate({ ...scan, args: args.slice(1) })
+        if (issue) return issue
+      }
+      if (sub === 'pr' && args[0] === 'merge') {
+        const issue = checkPullRequestMerge(args.slice(1), ctx)
         if (issue) return issue
       }
       continue

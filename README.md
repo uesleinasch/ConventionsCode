@@ -58,10 +58,12 @@ O bloqueio pode ser ajustado depois em `/config` → `conventions-code.blockedRe
 ```text
 /conventions status             # o que está ativo neste projeto
 /conventions enable gitflow     # ativa só neste projeto (cria .claude/conventions.json)
-/conventions setup gitflow      # copia workflows e templates (não sobrescreve arquivos)
+/conventions setup gitflow [ref]  # copia workflows e templates (não sobrescreve) e cria as branches permanentes que faltam
 /conventions disable gitflow    # desativa neste projeto
 /conventions release off        # o agente só mostra os passos de release (padrão: autorizado)
 /conventions release on         # volta a autorizar
+/conventions auto on            # autonomia: release + merge de PRs, fluxo de ponta a ponta (padrão: off)
+/conventions auto off           # merges de PR voltam a ser do usuário
 /conventions main-sync 3        # PR production → main a cada 3 releases (padrão 2)
 
 /conventions enable clean-code
@@ -74,13 +76,14 @@ Commite `.claude/conventions.json` para que o opt-in fique registrado no própri
 
 ### GitFlow: o que é bloqueado quando ativo
 
-- Branch fora de `feature|bugfix|hotfix|chore/<descricao-em-kebab>` ou `release/vX.Y.Z`; branch nascendo de `staging` ou `main`.
+- Branch fora de `feature|bugfix|hotfix|chore/<descricao-em-kebab>` ou `release/vX.Y.Z`; branch nascendo de `staging` ou `main`; criar `production`, `main` ou `staging` sem ser cópia da remota.
 - Commit fora de Conventional Commits; commit, merge ou rebase local em `production`, `main` e `release/*`; commit direto em `staging`.
 - Puxar `staging` ou `main` para outra branch (`merge`, `rebase`, `pull`).
 - Push direto em `production` e `main`; force push sem lease; `--all`, `--mirror`, `--tags`; remoção de branches permanentes.
 - Tags `v*` leves, fora de `vX.Y.Z`, movidas ou apagadas.
 - `gh pr create` com título fora do padrão ou rota de branches não permitida.
 - `gh pr create` para `main` vindo de qualquer branch que não seja `production`.
+- `gh pr merge --admin`, sempre; `gh pr merge` sem `/conventions auto on`.
 - Com `/conventions release off`: criar ou enviar `release/*`, criar ou enviar tags `v*`, resetar `staging` e abrir PR de release para `production` ou de backup para `main`.
 
 A guarda local orienta o agente. A proteção definitiva fica nos rulesets e workflows do GitHub — veja [GitFlow/04-seguranca.md](GitFlow/04-seguranca.md).
