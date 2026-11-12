@@ -108,6 +108,17 @@ test('clean-code injeta regras próprias, não bloqueia Bash e exige stack no se
   expect(again.text).toMatch(/= ruff\.toml \(já existia/)
 })
 
+test('setup gitflow relata as branches permanentes', async ($, on) => {
+  const fake: Fake = { files: new Map(), branch: 'main', remotes: '' }
+  fakeHost(on, fake)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+
+  await $.command.run(run('enable gitflow'))
+  const setup = await $.command.run(run('setup gitflow'))
+  expect(setup.text).toMatch(/Branches permanentes:/)
+  expect(setup.text).toMatch(/setup gitflow <ref>/)
+})
+
 test('release vem autorizado por padrão; off/on e main-sync ficam gravados', async ($, on) => {
   const fake: Fake = { files: new Map(), branch: 'production', remotes: '' }
   fakeHost(on, fake)
@@ -138,4 +149,35 @@ test('release vem autorizado por padrão; off/on e main-sync ficam gravados', as
 
   await $.command.run(run('disable gitflow'))
   expect(JSON.parse(fake.files.get(MARKER)!)).toEqual({ enabled: [] })
+})
+
+test('auto on libera merge de PR e liga release; release off revoga a autonomia', async ($, on) => {
+  const fake: Fake = { files: new Map(), branch: 'feature/x', remotes: '' }
+  fakeHost(on, fake)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  const MERGE = { tool: 'Bash', command: 'gh pr merge 42 --squash' } as const
+
+  expect((await $.command.run(run('auto on'))).text).toMatch(/enable gitflow/)
+
+  await $.command.run(run('enable gitflow'))
+  await $.command.run(run('release off'))
+  const locked = await $.tool.call(MERGE)
+  expect(locked.deny ?? locked.text).toMatch(/auto on/)
+
+  const enabled = await $.command.run(run('auto on'))
+  expect(enabled.context?.[0]).toMatch(/Autonomia: ATIVA/)
+  expect(JSON.parse(fake.files.get(MARKER)!)).toEqual({ enabled: ['gitflow'], releaseAgent: true, autonomy: true, mainSyncEvery: 2 })
+  expect((await $.tool.call(MERGE)).deny).toBeUndefined()
+  expect((await $.command.run(run('status'))).text).toMatch(/Autonomia .*: ativa/)
+
+  await $.command.run(run('release off'))
+  expect(JSON.parse(fake.files.get(MARKER)!)).toEqual({ enabled: ['gitflow'], releaseAgent: false, mainSyncEvery: 2 })
+  const revoked = await $.tool.call(MERGE)
+  expect(revoked.deny ?? revoked.text).toMatch(/auto on/)
+
+  await $.command.run(run('auto on'))
+  await $.command.run(run('auto off'))
+  expect(JSON.parse(fake.files.get(MARKER)!)).toEqual({ enabled: ['gitflow'], releaseAgent: true, autonomy: false, mainSyncEvery: 2 })
+  const off = await $.tool.call(MERGE)
+  expect(off.deny ?? off.text).toMatch(/auto on/)
 })

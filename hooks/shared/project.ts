@@ -4,12 +4,13 @@ export const MARKER_PATH = '.claude/conventions.json'
 
 export const DEFAULT_MAIN_SYNC_EVERY = 2
 
-export type Marker = { enabled: string[]; releaseAgent?: boolean; mainSyncEvery?: number }
+export type Marker = { enabled: string[]; releaseAgent?: boolean; autonomy?: boolean; mainSyncEvery?: number }
 
 export type ProjectState = {
   root: string
   enabled: ReadonlySet<string>
   releaseAgent: boolean
+  autonomy: boolean
   mainSyncEvery: number
   blockedBy: string | undefined
 }
@@ -30,6 +31,7 @@ export async function readMarker($: EngineInterface, root: string): Promise<Mark
       enabled: Array.isArray(parsed.enabled) ? parsed.enabled.filter(m => typeof m === 'string') : [],
     }
     if (typeof parsed.releaseAgent === 'boolean') marker.releaseAgent = parsed.releaseAgent
+    if (typeof parsed.autonomy === 'boolean') marker.autonomy = parsed.autonomy
     if (Number.isInteger(parsed.mainSyncEvery) && parsed.mainSyncEvery! > 0) marker.mainSyncEvery = parsed.mainSyncEvery
     return marker
   } catch {
@@ -60,12 +62,16 @@ export async function blockedPattern(
 export async function projectState($: EngineInterface, patterns: readonly string[]): Promise<ProjectState> {
   const root = await projectRoot($)
   const blockedBy = await blockedPattern($, root, patterns)
-  if (blockedBy) return { root, enabled: new Set(), releaseAgent: false, mainSyncEvery: DEFAULT_MAIN_SYNC_EVERY, blockedBy }
+  if (blockedBy) {
+    return { root, enabled: new Set(), releaseAgent: false, autonomy: false, mainSyncEvery: DEFAULT_MAIN_SYNC_EVERY, blockedBy }
+  }
   const marker = await readMarker($, root)
+  const releaseAgent = marker.releaseAgent ?? true
   return {
     root,
     enabled: new Set(marker.enabled),
-    releaseAgent: marker.releaseAgent ?? true,
+    releaseAgent,
+    autonomy: releaseAgent && marker.autonomy === true,
     mainSyncEvery: marker.mainSyncEvery ?? DEFAULT_MAIN_SYNC_EVERY,
     blockedBy,
   }
